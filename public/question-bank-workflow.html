@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>题库列表（QuestionBank）通路梳理</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;margin:24px;color:#1f1f1f}
+    h1,h2{margin:0 0 12px}
+    h1{font-size:22px} h2{font-size:18px}
+    .section{margin-bottom:24px}
+    .card{background:#fff;border:1px solid #f0f0f0;border-radius:8px;padding:16px}
+    ul{margin:8px 0 0 20px}
+    .mermaid{margin-top:12px}
+  </style>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'default' })</script>
+  <meta name="color-scheme" content="light dark">
+</head>
+<body>
+  <div class="section">
+    <h1>题库列表（QuestionBank）通路梳理</h1>
+    <div class="card">
+      <h2>页面清单（关联项）</h2>
+      <ul>
+        <li>教师端：QuestionBankList、QuestionEdit、QuestionNew、ItemSelect、ItemStats、AutoPaper、GenerateHomework、AssignmentManage、AssignmentPreview、PublishConfirm、OCRScan、ScanCollect、RecomposeErrors</li>
+        <li>教务端：affairs/QuestionSource</li>
+        <li>学生端：student/Mistakes、student/MistakesDetail、student/MistakesRecompose</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section card">
+    <h2>通路（教师端主流程）</h2>
+    <pre class="mermaid">
+flowchart TD
+  A[教师端一级菜单] --> B[QuestionBankList 题库列表]
+  B --> C1{行内操作}
+  C1 -->|加入作业| D[AssignmentManage 作业管理]
+  C1 -->|加入试题篮| E[试题篮浮层] --> E2[AssignmentPreview 作业预览] --> E3[PublishConfirm 在线发布]
+  C1 -->|编辑| F[QuestionEdit 题目编辑]
+  C1 -->|复制为新题| G[QuestionNew 题目新建]
+  C1 -->|预览| H[题目详情/预览视图]
+  C1 -->|导入/批量编辑| I[导入/批量弹窗] --> B
+
+  subgraph 选题与组卷
+    J[ItemSelect 选题面板] --> K[GenerateHomework 生成巩固作业] --> D
+    J --> L[AutoPaper 自动组卷] --> D
+  end
+
+  subgraph 扫描与OCR入库
+    M[ScanCollect 扫描采集] --> N[OCRScan OCR录题] --> F
+  end
+
+  subgraph 错题与改编
+    O[ItemStats 题目统计] --> P[RecomposeErrors 错题重组] --> J
+  end
+    </pre>
+  </div>
+
+  <div class="section card">
+    <h2>通路（教务端与学生端关联）</h2>
+    <pre class="mermaid">
+flowchart LR
+  QA[affairs/QuestionSource 题源页] --> QB[QuestionBankList] --> F[QuestionEdit]
+  S1[student/Mistakes 错题本] --> S2[学生错题详情\nstudent/MistakesDetail] --> S3[student/MistakesRecompose]
+  S3 --> J[ItemSelect] --> D[AssignmentManage]
+    </pre>
+  </div>
+
+  <div class="section card">
+    <h2>数据通路（Dataflow）</h2>
+    <pre class="mermaid">
+flowchart LR
+  T[题目实体 Question] --> S[选题集合 SelectedSet]
+  S --> B[试题篮 Basket] --> AP[AssignmentPreview]
+  S --> AG[作业草稿 AssignmentDraft] --> AM[作业管理 AssignmentManage]
+  AM --> PC[发布确认 PublishConfirm] --> PUB[已发布 Assignment]
+
+  RAW[扫描/原始试卷] --> OCR[OCR识别] --> T
+  STAT[统计指标] --> PIVOT[维度分析] --> INS[错题集合/重组提示] --> S
+    </pre>
+  </div>
+
+  <div class="section card">
+    <h2>路由与参数建议</h2>
+    <ul>
+      <li>加入作业：/teacher/assignment/manage?add=&lt;questionId&gt; 或使用试题篮 basket=true</li>
+      <li>选题面板模式：/teacher/item-select?mode=create|append&target=&lt;classId|layerId&gt;</li>
+      <li>自动组卷：/teacher/auto-paper?rule=&lt;json&gt;</li>
+      <li>OCR录题返回：/teacher/question/edit?id=&lt;newQuestionId&gt; 或 /teacher/question/new?draft=&lt;draftId&gt;</li>
+    </ul>
+  </div>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "recommendations": [
+    "bradlc.vscode-tailwindcss",
+    "esbenp.prettier-vscode",
+    "antfu.iconify",
+    "antfu.vite",
+    "antfu.vue-devtools",
+    "GitHub.copilot",
+    "GitHub.copilot-chat",
+    "Vue.volar",
+    "ms-vscode.vscode-typescript-next",
+    "yoavbls.pretty-ts-errors",
+    "dbaeumer.vscode-eslint"
+  ]
+}

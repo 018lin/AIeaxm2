@@ -1,0 +1,117 @@
+:root {
+  /* Status Colors */
+  --color-success: #22c55e;
+  --color-success-bg: rgba(34, 197, 94, 0.95);
+  --color-warning: #ff7d00;
+  --color-warning-bg: rgba(236, 122, 46, 0.95);
+  --color-error: #dc2626;
+  --color-error-bg: rgba(220, 38, 38, 0.1);
+  --color-info: #3b82f6;
+  --color-info-bg: #eff6ff;
+
+  /* Text Colors */
+  --color-text-primary: #1f2937;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
+  --color-text-light: #ffffff;
+
+  /* Backgrounds & Borders */
+  --color-bg-card: rgba(255, 255, 255, 0.96);
+  --color-bg-warm: rgba(255, 244, 231, 1);
+  --color-border-light: rgba(242, 235, 230, 1);
+  --color-shadow-brown: rgba(148, 117, 98, 0.08);
+
+  /* Specific Text Colors */
+  --color-text-brown: rgba(153, 107, 77, 0.78);
+  --color-text-brown-light: rgba(153, 107, 77, 0.62);
+
+  /* Chart/Status Colors */
+  --color-chart-green-bg: rgba(34, 197, 94, 0.32);
+  --color-chart-green-fill: rgba(34, 197, 94, 0.75);
+
+  /* Background Colors */
+  --color-bg-primary: #f3f4f6;
+  --color-bg-surface: #ffffff;
+  --color-bg-hover: #f9fafb;
+  --color-bg-active: #e5e7eb;
+  --color-white: #ffffff;
+
+  /* Border Colors */
+  --color-border: #e5e7eb;
+  --color-border-light: #f3f4f6;
+
+  /* Specific Homework Colors */
+  --color-hw-published: #22c55e;
+  --color-hw-published-bg: #dcfce7;
+  --color-hw-draft: #9ca3af;
+  --color-hw-draft-bg: #f3f4f6;
+  --color-hw-grading: #3b82f6;
+  --color-hw-grading-bg: #eff6ff;
+  --color-hw-processing: #f59e0b;
+  --color-hw-processing-bg: #fef3c7;
+
+  /* Status Pills */
+  --color-bg-success-light: #e7f8ed;
+  --color-border-success-light: #bef2d0;
+  --color-text-success-dark: #16a34a;
+
+  /* Chart Colors (Orange) */
+  --color-chart-orange-1: rgba(236, 122, 46, 0.25);
+  --color-chart-orange-2: rgba(236, 122, 46, 0.45);
+  --color-chart-orange-3: rgba(236, 122, 46, 0.7);
+
+  /* Primary Brand */
+  --color-primary: #ec7a2e;
+  --color-primary-hover: #d35400;
+  --color-primary-soft: rgba(236, 122, 46, 0.45);
+  --color-primary-bg-light: rgba(248, 244, 241, 0.9);
+  --color-primary-bg: #f8f7f6;
+
+  /* Review Tool Colors */
+  --color-review-correct-text: rgb(4, 120, 87);
+  --color-review-correct-border: rgb(167, 243, 208);
+  --color-review-correct-bg: rgb(209, 250, 229);
+  --color-review-correct-num: rgb(16, 185, 129);
+
+  --color-review-wrong-text: #ef4444;
+  --color-review-wrong-border: rgb(254, 205, 211);
+  --color-review-wrong-bg: rgb(255, 228, 230);
+  --color-review-wrong-num: rgb(244, 63, 94);
+
+  --color-review-half-text: rgb(180, 83, 9);
+  --color-review-half-bg: rgb(254, 243, 199);
+  --color-review-half-border: rgb(253, 230, 138);
+  --color-review-half-num: rgb(245, 158, 11);
+
+  --color-review-gray-text: rgb(71, 85, 105);
+  --color-review-gray-bg: rgb(241, 245, 249);
+  --color-review-gray-border: rgb(226, 232, 240);
+  --color-review-gray-num: rgb(100, 116, 139);
+  --color-review-gray-soft: rgb(148, 163, 184);
+
+  /* Unified Status Badges */
+  --color-badge-red-bg: rgba(255, 217, 214, 0.65);
+  --color-badge-red-text: #c4382d;
+  --color-badge-green-bg: rgba(34, 197, 94, 0.14);
+  --color-badge-green-text: rgb(34, 197, 94);
+  --color-badge-blue-bg: rgba(224, 242, 254, 0.85);
+  --color-badge-blue-text: rgba(37, 99, 235, 0.9);
+  --color-badge-gray-bg: rgba(230, 230, 230, 0.75);
+  --color-badge-gray-text: rgba(17, 24, 39, 0.6);
+
+  /* Ant Design Colors for Drawing Tool */
+  --color-ant-black: #000000;
+  --color-ant-red: #f5222d;
+  --color-ant-green: #52c41a;
+  --color-ant-blue: #1890ff;
+  --color-ant-yellow: #ffc53d;
+  --color-ant-orange: #fa8c16;
+  --color-ant-purple: #722ed1;
+  --color-ant-cyan: #13c2c2;
+  --color-ant-magenta: #eb2f96;
+  --color-ant-white: #ffffff;
+
+  --warm-gray-text: #7c7267;
+  --warm-gray-heading: #4a443e;
+  --warm-border: #e8e4de;
+}
