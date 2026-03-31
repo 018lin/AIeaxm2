@@ -7,8 +7,8 @@
 	<a href="https://gitee.com/y_project/RuoYi/blob/master/LICENSE"><img src="https://img.shields.io/github/license/mashape/apistatus.svg"></a>
 </p>
 
-## 项目简介
-
+## 项目简介1
+   
 小鹿老师是一款面向K12教育的AI个性化平台，旨在通过AI技术辅助老师完成组卷和作业批改等教学任务。
 
 平台核心功能包括：
