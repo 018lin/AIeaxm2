@@ -48,7 +48,6 @@ import OperatePanel from '@/components/assigment/OperatePanel.vue'
 import ReviewPaper from '@/components/assigment/ReviewPaper.vue'
 import ReviewStudentList from '@/components/assigment/ReviewStudentList.vue'
 import TchDetailHeader from '@/components/common/TchDetailHeader.vue'
-import { teacherAssignmentsMock } from '@/config/mock/teacherAssignments'
 import { ROUTES } from '@/router/routes'
 import type { DetailTab, ReviewStudent, TabKey } from '@/types/assignment/manualReview'
 import { decrypt } from '@/utils/crypto'
@@ -308,12 +307,10 @@ const header = computed(() => {
     }
   }
 
-  const row =
-    teacherAssignmentsMock.rows.find((r: any) => r.id === assignmentId.value) || teacherAssignmentsMock.rows[0]
   return {
-    subject: row.subject,
-    gradeClass: row.grade,
-    paperName: row.paperSource || row.title,
+    subject: String((manualVO.value as any)?.subjectName || '-'),
+    gradeClass: String((manualVO.value as any)?.className || '-'),
+    paperName: String((manualVO.value as any)?.assignmentName || '-'),
   }
 })
 

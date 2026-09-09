@@ -62,17 +62,18 @@
           </template>
         </template>
       </a-table>
-      <TchPagination v-model:current="current" :page-size="pageSize" :total="filteredData.length" />
+      <TchPagination v-model:current="current" :page-size="pageSize" :total="total" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { listComposition, type CompositionItem } from '@/api/composition'
 import TchPagination from '@/components/common/table/TchPagination.vue'
-import { compositionMock } from '@/config/mock/composition'
 import { ROUTES } from '@/router/routes'
 import { EditOutlined, EyeOutlined, MoreOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons-vue'
-import { computed, ref } from 'vue'
+import { message } from 'ant-design-vue'
+import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -82,6 +83,8 @@ const dateRange = ref([])
 const keyword = ref('')
 const current = ref(1)
 const pageSize = ref(10)
+const rows = ref<CompositionItem[]>([])
+const total = ref(0)
 
 // 表格列定义
 const columns = [
@@ -92,22 +95,42 @@ const columns = [
   { title: '操作', key: 'action', width: 150 },
 ]
 
-// 计算过滤后的数据
-const filteredData = computed(() => {
-  let result = compositionMock.rows
+const pagedData = rows
 
-  if (keyword.value) {
-    const k = keyword.value.toLowerCase()
-    result = result.filter((item: { title: string }) => item.title.toLowerCase().includes(k))
+function formatDate(value: any) {
+  if (!value) return undefined
+  if (typeof value?.format === 'function') return value.format('YYYY-MM-DD')
+  return String(value)
+}
+
+async function fetchList() {
+  try {
+    const res = await listComposition({
+      keyword: keyword.value,
+      pageNo: current.value,
+      pageSize: pageSize.value,
+      startDate: formatDate((dateRange.value as any)?.[0]),
+      endDate: formatDate((dateRange.value as any)?.[1]),
+    })
+    rows.value = res?.list || res?.rows || []
+    total.value = Number(res?.total || rows.value.length || 0)
+  } catch (e: any) {
+    rows.value = []
+    total.value = 0
+    message.error(e?.message || '获取作文主题列表失败')
   }
+}
 
-  return result
+watch([current, pageSize], () => {
+  fetchList().catch(() => {})
 })
 
-const pagedData = computed(() => {
-  const start = (current.value - 1) * pageSize.value
-  return filteredData.value.slice(start, start + pageSize.value)
+watch([keyword, dateRange], () => {
+  current.value = 1
+  fetchList().catch(() => {})
 })
+
+fetchList().catch(() => {})
 
 const gotoCreate = () => {
   router.push(ROUTES.TEACHER_COMPOSITION_CREATE).catch(() => {})

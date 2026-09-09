@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { listExamination } from '@/api/examination'
 import TchPagination from '@/components/common/table/TchPagination.vue'
 import {
   AppstoreOutlined,
@@ -15,9 +16,9 @@ import {
   ReadOutlined,
   RedoOutlined,
 } from '@ant-design/icons-vue'
-import { computed, ref } from 'vue'
+import { message } from 'ant-design-vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
-// --- Mock Data ---
 const grades = ['全部年级', '一年级', '二年级', '三年级']
 const subjects = ['全科', '数学', '语文', '英语']
 
@@ -27,44 +28,8 @@ const viewMode = ref<'card' | 'table'>('card')
 const currentPage = ref(1)
 const pageSize = ref(10)
 
-const listData = ref([
-  {
-    id: 1,
-    status: 'downloaded',
-    gradeClass: '一年级 LX6-3班',
-    title: '2025.12.12 错题重做(数学)一年级专属版',
-    questionCount: 10,
-    date: '2025/12/12',
-    selected: false,
-  },
-  {
-    id: 2,
-    status: 'draft',
-    gradeClass: '一年级 LX6-4班',
-    title: '2025.12.12 错题重做(数学)期中复习特辑',
-    questionCount: 7,
-    date: '2025/12/12',
-    selected: false,
-  },
-  {
-    id: 3,
-    status: 'draft',
-    gradeClass: '二年级 LX2-1班',
-    title: '2025.12.05 错题重做(语文)全体学生必练',
-    questionCount: 15,
-    date: '2025/12/05',
-    selected: false,
-  },
-  {
-    id: 4,
-    status: 'downloaded',
-    gradeClass: '一年级 LX6-2班',
-    title: '2025.10.17 错题重做(英语)语法专项',
-    questionCount: 5,
-    date: '2025/10/17',
-    selected: true,
-  },
-])
+const total = ref(0)
+const listData = ref<any[]>([])
 
 // --- Table Configuration ---
 const columns = [
@@ -88,6 +53,56 @@ const selectedRowKeys = computed({
 const onSelectChange = (keys: number[]) => {
   selectedRowKeys.value = keys
 }
+
+function normalizeStatus(status: any) {
+  return ['finalized', 'published', 'enabled', 1].includes(status) ? 'downloaded' : 'draft'
+}
+
+function formatDate(value: any) {
+  if (!value) return '-'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  return d.toISOString().slice(0, 10)
+}
+
+async function fetchList() {
+  try {
+    const res = await listExamination({
+      assignmentType: 'ERROR_QUESTION_PACK',
+      pageNo: currentPage.value,
+      pageSize: pageSize.value,
+      gradeName: selectedGrade.value === '全部年级' ? undefined : selectedGrade.value,
+      subjectName: selectedSubject.value === '全科' ? undefined : selectedSubject.value,
+    } as any)
+    listData.value = (res?.list || []).map((item: any) => ({
+      id: item.assignmentId || item.id,
+      status: normalizeStatus(item.status),
+      gradeClass: [item.gradeName, item.className || item.groupName].filter(Boolean).join(' '),
+      title: item.assignmentName || '-',
+      questionCount: Number(item.questionNumbers || 0),
+      date: formatDate(item.createTime || item.updateTime),
+      selected: false,
+    }))
+    total.value = Number(res?.total || 0)
+  } catch (e: any) {
+    listData.value = []
+    total.value = 0
+    message.error(e?.message || '获取错题周报记录失败')
+  }
+}
+
+watch([currentPage, pageSize], () => {
+  fetchList().catch(() => {})
+})
+
+watch([selectedGrade, selectedSubject], () => {
+  currentPage.value = 1
+  fetchList().catch(() => {})
+})
+
+onMounted(() => {
+  fetchList().catch(() => {})
+})
 </script>
 
 <template>
@@ -246,7 +261,7 @@ const onSelectChange = (keys: number[]) => {
     </div>
 
     <!-- Pagination -->
-    <TchPagination v-model:current="currentPage" v-model:pageSize="pageSize" :total="50" />
+    <TchPagination v-model:current="currentPage" v-model:pageSize="pageSize" :total="total" />
   </div>
 </template>
 

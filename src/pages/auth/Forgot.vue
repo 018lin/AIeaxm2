@@ -5,7 +5,7 @@
         <a-form-item label="邮箱/手机号">
           <a-input v-model="form.account" placeholder="请输入绑定的邮箱或手机号" allow-clear />
         </a-form-item>
-        <a-button type="primary" long @click="onSubmit">发送重置链接</a-button>
+        <a-button type="primary" long :loading="loading" @click="onSubmit">发送重置链接</a-button>
       </a-form>
     </a-card>
   </div>
@@ -13,17 +13,27 @@
 
 <script setup lang="ts">
 // 忘记密码页 - 使用 Arco Design Vue 组件
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { forgotPassword } from '@/api/login'
 
 const form = reactive({ account: '' })
+const loading = ref(false)
 
-function onSubmit() {
+async function onSubmit() {
   if (!form.account) {
     message.warning('请输入邮箱或手机号')
     return
   }
-  message.success('重置链接已发送（演示）')
+  loading.value = true
+  try {
+    await forgotPassword({ account: form.account })
+    message.success('重置链接已发送')
+  } catch (error: any) {
+    message.error(error?.message || '发送重置链接失败')
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 

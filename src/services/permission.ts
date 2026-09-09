@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import { requestPost } from '@/api'
 
 export interface Permission {
   id: string
@@ -239,21 +240,13 @@ class PermissionService {
     }
   }
 
-  // 模拟后端权限验证
   async validateWithBackend(userId: string, permissionCode: string): Promise<boolean> {
     try {
-      // 模拟API调用延迟
-      await new Promise(resolve => setTimeout(resolve, 100))
-
-      // 模拟后端验证逻辑
-      const mockBackendValidation = () => {
-        const userRole = this.currentUserRoles.value.find(ur => ur.userId === userId)
-        if (!userRole) return false
-
-        return userRole.role.permissions.some(p => p.code === permissionCode)
-      }
-
-      return mockBackendValidation()
+      const res = await requestPost<{ hasPermission?: boolean }, { userId: string; permissionCode: string }>(
+        '/api/v1/permission/validate',
+        { userId, permissionCode }
+      )
+      return Boolean(res?.hasPermission)
     } catch (error) {
       console.error('后端权限验证失败:', error)
       return false
@@ -271,11 +264,8 @@ class PermissionService {
         timestamp: new Date().toISOString(),
       }
 
-      // 模拟API调用
-      await new Promise(resolve => setTimeout(resolve, 200))
-
-      console.log('权限数据同步到后端:', permissionData)
-      return true
+      const res = await requestPost<boolean, typeof permissionData>('/api/v1/permission/sync', permissionData)
+      return Boolean(res)
     } catch (error) {
       console.error('权限数据同步失败:', error)
       return false
@@ -320,9 +310,9 @@ export const PERMISSIONS = {
   REVIEW_GENERATE_DIGITAL_HUMAN: 'review:generate_digital_human',
   RESOURCE_VIEW_DIGITAL_HUMAN: 'resource:view_digital_human',
 
-  // 统计与计划（Mock）
+  // 统计与计划
   STATS_EXPORT: 'stats:export',
-  SCHEDULE_MOCK_TASK: 'schedule:mock_task',
+  SCHEDULE_TASK: 'schedule:task',
 
   // 题目来源查看
   QUESTION_VIEW_SOURCE: 'question:view_source',

@@ -1,5 +1,6 @@
 import { requestGet, requestPost } from '@/api/index'
 import type {
+  ForgotPasswordRequest,
   LoginRequest,
   LoginResponse,
   PermissionInfoResponse,
@@ -32,6 +33,11 @@ export function logout() {
 // 重置密码
 export function resetPassword(params: ResetPasswordRequest) {
   return requestPost<boolean, ResetPasswordRequest>('/api/v1/oauth/reset-password', params)
+}
+
+// 忘记密码
+export function forgotPassword(params: ForgotPasswordRequest) {
+  return requestPost<boolean, ForgotPasswordRequest>('/api/v1/oauth/forgot-password', params)
 }
 
 // 获取用户权限信息

@@ -20,14 +20,8 @@ export default function useAuth() {
   // const role = useLocalStorage<Role>('role', 'teacher')
   const user = useLocalStorage<User | null>('user', null)
 
-  function login(nextRole: Role) {
-    // 删除role存储
-    // role.value = nextRole
-    // isAuthed.value = true
-    user.value = { username: nextRole, role: nextRole }
-    localStorage.setItem('isAuthed', 'true')
-    localStorage.setItem('accessToken', 'mock-access-token')
-    localStorage.setItem('token', 'mock-access-token')
+  function login(_nextRole: Role) {
+    throw new Error('已禁用本地模拟登录，请使用 loginWithCredentials 调用真实认证接口')
   }
 
   async function loginWithCredentials(username: string, password: string, tenantId?: string): Promise<Role> {

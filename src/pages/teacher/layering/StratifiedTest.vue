@@ -65,6 +65,7 @@
 <script setup lang="ts">
 import { getTagList } from '@/api/common/index'
 import type { tagListResponse } from '@/api/common/type'
+import { getStrategyList } from '@/api/layering'
 import { listQuestionBank } from '@/api/questionBank/index'
 import type { questionBankItem } from '@/api/questionBank/type'
 import QuestionList from '@/components/common/QuestionList.vue'
@@ -76,7 +77,7 @@ import SidebarTabs from '@/components/sidebarTabs/SidebarTabs.vue'
 import { selectEnum, tagEnum } from '@/enum/common'
 import { getUserBaseInfo } from '@/services/storage'
 import { Icon } from '@iconify/vue'
-import { Empty } from 'ant-design-vue'
+import { Empty, message } from 'ant-design-vue'
 import { onMounted, reactive, ref, watch } from 'vue'
 
 const simpleImage = Empty.PRESENTED_IMAGE_SIMPLE
@@ -94,11 +95,7 @@ const classList = ref(parsedUserInfo?.classInfoList || []) // 班级列表
 const subjectId = ref(parsedUserInfo?.subjectId || '') // 当前选择的学科ID
 const classId = ref<string>('') // 当前选择的班级ID
 const layeredIds = ref<string[]>([]) // 已分层的题目ID列表
-const plainOptions = [
-  { groupName: '基础层', groupId: '1' },
-  { groupName: '提高层', groupId: '2' },
-  { groupName: '拓展层', groupId: '3' },
-]
+const plainOptions = ref<{ groupName: string; groupId: string }[]>([])
 const allTabs = [
   { key: 'chapter', label: '章节' },
   { key: 'knowledge', label: '知识点' },
@@ -146,6 +143,7 @@ const handleFilter = (params: any) => {
 onMounted(() => {
   // 获取题库列表
   getList()
+  fetchLayerOptions()
   // 获取难度标签
   getTags(tagEnum.DIFFICULTY)
   // 获取题型标签
@@ -159,6 +157,29 @@ const getTags = async (tagTypeVal: string) => {
     difficultyTagList.value = res || []
   } else if (tagTypeVal === tagEnum.QUESTION_TYPE) {
     questionTypeList.value = res || []
+  }
+}
+
+const fetchLayerOptions = async () => {
+  if (!gradeId.value || !classId.value) {
+    plainOptions.value = []
+    return
+  }
+  try {
+    const res = await getStrategyList({
+      classId: classId.value,
+      gradeId: gradeId.value,
+      pageNo: 1,
+      pageSize: 1,
+      type: 'manual',
+    })
+    const groups = (res?.list || []).flatMap(item => item.studentGroupVOS || [])
+    plainOptions.value = groups
+      .filter(item => item.groupId && item.groupName)
+      .map(item => ({ groupId: String(item.groupId), groupName: String(item.groupName) }))
+  } catch (e: any) {
+    plainOptions.value = []
+    message.error(e?.message || '获取分层列表失败')
   }
 }
 
@@ -229,6 +250,11 @@ watch(
   },
   { deep: true, immediate: true }
 )
+
+watch([gradeId, classId], () => {
+  layeredIds.value = []
+  fetchLayerOptions().catch(() => {})
+})
 </script>
 
 <style scoped lang="scss">

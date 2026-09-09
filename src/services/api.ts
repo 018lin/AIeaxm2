@@ -11,7 +11,7 @@ const requestCache = new Map<string, { data: any; timestamp: number }>()
 // 请求去重
 const pendingRequests = new Map<string, Promise<any>>()
 
-// const useMock = String(import.meta.env.VITE_USE_MOCK) === 'true'
+const useMock = String(import.meta.env.VITE_USE_MOCK) === 'true'
 const configuredBaseURL = (import.meta as any).env.VITE_API_BASE || ''
 const baseURL =
   (import.meta as any).env.PROD && /^https?:\/\/(localhost|127\.0\.0\.1)(?::\d+)?/i.test(configuredBaseURL)
@@ -229,15 +229,24 @@ export function getCacheStats(): { size: number; hitRate: number } {
 }
 
 export async function withMock<T>(
-  // realCall: () => Promise<T>,
+  realCall: () => Promise<T>,
   mockCall: (() => Promise<T>) | (() => T) | T
 ): Promise<T> {
-  // if (useMock) {
+  if (useMock) {
+    if (typeof mockCall === 'function') {
+      const res = (mockCall as any)()
+      return res instanceof Promise ? await res : (res as T)
+    }
+    return mockCall as T
+  }
+
+  return realCall()
+}
+
+export async function mockOnly<T>(mockCall: (() => Promise<T>) | (() => T) | T): Promise<T> {
   if (typeof mockCall === 'function') {
     const res = (mockCall as any)()
     return res instanceof Promise ? await res : (res as T)
   }
   return mockCall as T
-  // }
-  // return realCall()
 }

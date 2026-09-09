@@ -5,6 +5,8 @@
         :columns="columns"
         :data-source="teachers"
         :pagination="false"
+        :loading="loading"
+        row-key="key"
         :row-selection="{ selectedRowKeys: selectedRowKeys, onChange: onSelectChange }"
         class="teacher-table"
         :scroll="{ y: 630 }"
@@ -34,23 +36,29 @@
       </a-table>
     </div>
     <div class="table-footer">
-      <div class="footer-info">共 {{ teachers.length }} 名教师</div>
-      <a-pagination v-model:current="currentPage" :total="48" :pageSize="15" show-less-items />
+      <div class="footer-info">共 {{ total }} 名教师</div>
+      <a-pagination v-model:current="currentPage" :total="total" :pageSize="pageSize" show-less-items @change="fetchTeachers" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { getTeacherPage } from '@/api/adminEducation/teacherIndex'
+import type { TeachersByClassIdResponse } from '@/api/adminEducation/type'
+import { message } from 'ant-design-vue'
+import { onMounted, ref } from 'vue'
 
 // const schoolSearch = ref('')
 // const selectedSchoolId = ref(1)
-const selectedRowKeys = ref([])
+const selectedRowKeys = ref<(string | number)[]>([])
 const currentPage = ref(1)
+const pageSize = 15
+const total = ref(0)
+const loading = ref(false)
 // const jumpPage = ref('1')
 // const pageSize = ref('10')
 
-const onSelectChange = (keys: any) => {
+const onSelectChange = (keys: (string | number)[]) => {
   selectedRowKeys.value = keys
 }
 
@@ -71,159 +79,57 @@ const columns = [
   { title: '年级/班级', align: 'center', key: 'gradeClass' },
 ]
 
-const teachers = ref([
-  {
-    key: '1',
-    id: '06',
-    cnName: '翟梦雪',
-    enName: 'Zhai MX',
-    initials: '翟',
-    avatarBg: '#ffedd5',
-    avatarColor: '#f97316',
-    account: '152****5391',
-    mobile: '152****5391',
-    subject: '语文',
-    gradeClasses: [{ grade: '5', classes: ['03', '04'] }],
-  },
-  {
-    key: '2',
-    id: '07',
-    cnName: '张玉',
-    enName: 'Zhang Yu',
-    initials: '张',
-    avatarBg: '#f5f3ff',
-    avatarColor: '#8b5cf6',
-    account: '155****8916',
-    mobile: '155****8916',
-    subject: '数学',
-    gradeClasses: [{ grade: '5', classes: ['05', '06'] }],
-  },
-  {
-    key: '3',
-    id: '11',
-    cnName: '元妮妮',
-    enName: 'Yuan NN',
-    initials: '元',
-    avatarBg: '#ecfdf5',
-    avatarColor: '#10b981',
-    account: '153****2859',
-    mobile: '153****2859',
-    subject: '全科',
-    gradeClasses: [
-      { grade: '4', classes: ['01', '02', '03', '04'] },
-      { grade: '5', classes: ['01', '02', '03', '04'] },
-      { grade: '6', classes: ['01', '02', '03', '04'] },
-    ],
-  },
-  {
-    key: '4',
-    id: '12',
-    cnName: '胡丽品',
-    enName: 'Hu LP',
-    initials: '胡',
-    avatarBg: '#fff1f2',
-    avatarColor: '#fb7185',
-    account: '153****5879',
-    mobile: '153****5879',
-    subject: '全科',
-    gradeClasses: [
-      { grade: '4', classes: ['01-04'] },
-      { grade: '5', classes: ['01-04'] },
-    ],
-  },
-  {
-    key: '1',
-    id: '06',
-    cnName: '翟梦雪',
-    enName: 'Zhai MX',
-    initials: '翟',
-    avatarBg: '#ffedd5',
-    avatarColor: '#f97316',
-    account: '152****5391',
-    mobile: '152****5391',
-    subject: '语文',
-    gradeClasses: [{ grade: '5', classes: ['03', '04'] }],
-  },
-  {
-    key: '2',
-    id: '07',
-    cnName: '张玉',
-    enName: 'Zhang Yu',
-    initials: '张',
-    avatarBg: '#f5f3ff',
-    avatarColor: '#8b5cf6',
-    account: '155****8916',
-    mobile: '155****8916',
-    subject: '数学',
-    gradeClasses: [{ grade: '5', classes: ['05', '06'] }],
-  },
-  {
-    key: '3',
-    id: '11',
-    cnName: '元妮妮',
-    enName: 'Yuan NN',
-    initials: '元',
-    avatarBg: '#ecfdf5',
-    avatarColor: '#10b981',
-    account: '153****2859',
-    mobile: '153****2859',
-    subject: '全科',
-    gradeClasses: [
-      { grade: '4', classes: ['01', '02', '03', '04'] },
-      { grade: '5', classes: ['01', '02', '03', '04'] },
-      { grade: '6', classes: ['01', '02', '03', '04'] },
-    ],
-  },
-  {
-    key: '4',
-    id: '12',
-    cnName: '胡丽品',
-    enName: 'Hu LP',
-    initials: '胡',
-    avatarBg: '#fff1f2',
-    avatarColor: '#fb7185',
-    account: '153****5879',
-    mobile: '153****5879',
-    subject: '全科',
-    gradeClasses: [
-      { grade: '4', classes: ['01-04'] },
-      { grade: '5', classes: ['01-04'] },
-    ],
-  },
-  {
-    key: '3',
-    id: '11',
-    cnName: '元妮妮',
-    enName: 'Yuan NN',
-    initials: '元',
-    avatarBg: '#ecfdf5',
-    avatarColor: '#10b981',
-    account: '153****2859',
-    mobile: '153****2859',
-    subject: '全科',
-    gradeClasses: [
-      { grade: '4', classes: ['01', '02', '03', '04'] },
-      { grade: '5', classes: ['01', '02', '03', '04'] },
-      { grade: '6', classes: ['01', '02', '03', '04'] },
-    ],
-  },
-  {
-    key: '4',
-    id: '12',
-    cnName: '胡丽品',
-    enName: 'Hu LP',
-    initials: '胡',
-    avatarBg: '#fff1f2',
-    avatarColor: '#fb7185',
-    account: '153****5879',
-    mobile: '153****5879',
-    subject: '全科',
-    gradeClasses: [
-      { grade: '4', classes: ['01-04'] },
-      { grade: '5', classes: ['01-04'] },
-    ],
-  },
-])
+type TeacherRow = {
+  key: string
+  id: string
+  cnName: string
+  account: string
+  mobile: string
+  subject: string
+  gradeClasses: { grade: string; classes: string[] }[]
+}
+
+const teachers = ref<TeacherRow[]>([])
+
+function toTeacherRow(item: TeachersByClassIdResponse, index: number): TeacherRow {
+  const classGroups = new Map<string, string[]>()
+  for (const classInfo of item.classInfoList || []) {
+    const grade = String(item.gradeName || item.gradeId || '-')
+    const list = classGroups.get(grade) || []
+    list.push(String(classInfo.className || classInfo.classId || '-'))
+    classGroups.set(grade, list)
+  }
+
+  return {
+    key: String(item.teacherId || item.userId || item.id || index),
+    id: String(item.teacherId || item.id || index + 1),
+    cnName: String(item.teacherName || item.userName || '-'),
+    account: String(item.userName || item.phoneNumber || '-'),
+    mobile: String(item.phoneNumber || '-'),
+    subject: String(item.subjectName || item.subjectId || '-'),
+    gradeClasses: [...classGroups.entries()].map(([grade, classes]) => ({ grade, classes })),
+  }
+}
+
+async function fetchTeachers(page = currentPage.value) {
+  currentPage.value = page
+  loading.value = true
+  try {
+    const res = await getTeacherPage({ pageNo: currentPage.value, pageSize })
+    teachers.value = (res?.list || []).map(toTeacherRow)
+    total.value = Number(res?.total || 0)
+  } catch (e: any) {
+    teachers.value = []
+    total.value = 0
+    message.error(e?.message || '获取教师列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchTeachers().catch(() => {})
+})
 </script>
 
 <style scoped lang="less">

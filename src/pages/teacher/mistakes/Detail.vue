@@ -100,8 +100,8 @@
                 </div>
 
                 <!-- Analysis if wrong -->
-                <div v-if="q.status === 'wrong'" class="analysis">
-                  <span class="analysis-label">解析：</span>应为 {{ q.correctAnswer }}
+              <div v-if="q.status === 'wrong'" class="analysis">
+                  <span class="analysis-label">解析：</span>{{ q.analysis || q.correctAnswer || '-' }}
                 </div>
               </div>
             </div>
@@ -120,11 +120,7 @@
             </div>
           </div>
 
-          <div v-for="i in 3" :key="`placeholder-${i}`" class="question-card is-placeholder">
-            <div class="skeleton-line is-short" />
-            <div class="skeleton-block" />
-            <div class="skeleton-box" />
-          </div>
+          <a-empty v-if="!questions.length" description="暂无错题数据" />
         </div>
       </div>
     </main>
@@ -132,77 +128,78 @@
 </template>
 
 <script setup lang="ts">
+import { getMistakeDetail, getMistakeStudentStatistics, type MistakeDetailQuestion } from '@/api/mistakes'
 import { Icon } from '@iconify/vue'
-import { computed, ref } from 'vue'
+import { message } from 'ant-design-vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const router = useRouter()
 const route = useRoute()
 
-// Mock Data
 const searchText = ref('')
-const currentStudentId = ref<string>(String(route.params.studentId || '1'))
+const currentStudentId = ref<string>(String(route.params.studentId || route.params.id || ''))
 const currentDate = ref('all')
 
-const students = [
-  { id: '1', name: '李显允', studentId: '2001025', progress: 85 },
-  { id: '2', name: '钟可', studentId: '2001047', progress: 40 },
-  { id: '3', name: '张博超', studentId: '2001015', progress: 10 },
-  { id: '4', name: '王梓衿', studentId: '2001036', progress: 65 },
-  { id: '5', name: '刘子语', studentId: '2001004', progress: 90 },
-  { id: '6', name: '郑伊萱', studentId: '2001046', progress: 30 },
-  { id: '7', name: '庞宜康', studentId: '2001014', progress: 0 },
-  { id: '8', name: '王一诺', studentId: '2001035', progress: 100 },
-  { id: '9', name: '刘奕涵', studentId: '2001003', progress: 55 },
-  { id: '10', name: '朱雨菌', studentId: '2001024', progress: 20 },
-  { id: '11', name: '赵子上', studentId: '2001045', progress: 75 },
-]
-
-const dates = [
-  { label: '全部日期', value: 'all' },
-  { label: '2024-03-20', value: '2024-03-20' },
-  { label: '2024-03-19', value: '2024-03-19' },
-  { label: '2024-03-18', value: '2024-03-18' },
-  { label: '2024-03-17', value: '2024-03-17' },
-  { label: '2024-03-16', value: '2024-03-16' },
-]
-
-const questions = [
-  {
-    id: 1,
-    no: '05',
-    status: 'pending',
-    content: '一辆汽车从甲地开往乙地，已行了全程的 3/5，还剩120千米，甲乙两地全长多少千米？',
-    studentAnswer: '120 ÷ (1 - 3/5) = 300(km)',
-    time: '2024-03-20 09:12',
-  },
-  {
-    id: 2,
-    no: '01',
-    status: 'correct',
-    content: '计算 3.14 × 5² 的结果。',
-    studentAnswer: '78.5',
-    time: '2024-03-20 08:45',
-  },
-  {
-    id: 3,
-    no: '02',
-    status: 'wrong',
-    content: '解方程： 2x + 15 = 45',
-    studentAnswer: 'x = 30',
-    correctAnswer: 'x = 15',
-    time: '2024-03-20 08:50',
-  },
-]
+const students = ref<{ id: string; name: string; studentId: string; progress: number }[]>([])
+const dates = ref([{ label: '全部日期', value: 'all' }])
+const questions = ref<MistakeDetailQuestion[]>([])
 
 const filteredStudents = computed(() => {
-  if (!searchText.value) return students
-  return students.filter(s => s.name.includes(searchText.value) || s.studentId.includes(searchText.value))
+  if (!searchText.value) return students.value
+  return students.value.filter(s => s.name.includes(searchText.value) || s.studentId.includes(searchText.value))
 })
 
 const selectStudent = (id: string) => {
   currentStudentId.value = id
 }
+
+function calcProgress(row: any) {
+  const total = Number(row.destroy || 0) + Number(row.redo || 0) + Number(row.wrongTotal || 0)
+  if (!total) return 0
+  return Math.round((Number(row.destroy || 0) / total) * 100)
+}
+
+async function fetchStudents() {
+  try {
+    const res = await getMistakeStudentStatistics()
+    students.value = (res || []).map(row => ({
+      id: String(row.id),
+      name: String(row.name || row.id),
+      studentId: String(row.id),
+      progress: calcProgress(row),
+    }))
+    if (!currentStudentId.value && students.value.length) currentStudentId.value = students.value[0].id
+  } catch (e: any) {
+    students.value = []
+    message.error(e?.message || '获取学生错题统计失败')
+  }
+}
+
+async function fetchDetail() {
+  if (!currentStudentId.value) {
+    questions.value = []
+    dates.value = [{ label: '全部日期', value: 'all' }]
+    return
+  }
+  try {
+    const res = await getMistakeDetail({ studentId: currentStudentId.value, date: currentDate.value })
+    questions.value = res?.questions || []
+    dates.value = res?.dates?.length ? res.dates : [{ label: '全部日期', value: 'all' }]
+  } catch (e: any) {
+    questions.value = []
+    message.error(e?.message || '获取错题详情失败')
+  }
+}
+
+watch([currentStudentId, currentDate], () => {
+  fetchDetail().catch(() => {})
+})
+
+onMounted(async () => {
+  await fetchStudents()
+  await fetchDetail()
+})
 
 const statusText = (status: string) => {
   const map: Record<string, string> = {

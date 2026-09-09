@@ -58,16 +58,16 @@
 </template>
 
 <script setup lang="ts">
+import { getMistakeStudentStatistics } from '@/api/mistakes'
 import TchPagination from '@/components/common/table/TchPagination.vue'
-import { studentRowsMock } from '@/config/mock/mistakes'
 import router from '@/router'
 import { ROUTES } from '@/router/routes'
 import type { StudentRow } from '@/types/mistakes/list'
 import { Icon } from '@iconify/vue'
 import { message } from 'ant-design-vue'
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
-const rows = ref<StudentRow[]>(studentRowsMock)
+const rows = ref<StudentRow[]>([])
 const pageSize = ref(10)
 const current = ref(1)
 
@@ -101,6 +101,19 @@ const openDetail = (row: StudentRow) => {
 const openMonitor = () => {
   message.info('错题班级细分监控')
 }
+
+async function fetchRows() {
+  try {
+    rows.value = await getMistakeStudentStatistics()
+  } catch (e: any) {
+    rows.value = []
+    message.error(e?.message || '获取错题统计失败')
+  }
+}
+
+onMounted(() => {
+  fetchRows().catch(() => {})
+})
 </script>
 
 <style scoped lang="scss">

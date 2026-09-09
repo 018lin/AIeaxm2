@@ -5,20 +5,13 @@ import { useLocalStorage } from '@vueuse/core'
 export type Role = 'teacher' | 'student' | 'admin' | 'edu_affairs'
 export type User = { username: string; role: Role }
 
-const DEMO_ACCOUNTS: Array<{ username: string; password: string; role: Role }> = [
-  { username: 'admin', password: 'Admin@123', role: 'admin' },
-  { username: 'teacher', password: 'Teacher@123', role: 'teacher' },
-]
-
 export default function useAuth() {
   // const isAuthed = useLocalStorage<boolean>('isAuthed', false)
   // const role = useLocalStorage<Role>('role', 'teacher')
   const user = useLocalStorage<User | null>('user', null)
 
-  function login(nextRole: Role) {
-    // role.value = nextRole
-    // isAuthed.value = true
-    user.value = { username: nextRole, role: nextRole }
+  function login(_nextRole: Role) {
+    throw new Error('已禁用本地模拟登录，请使用 loginWithCredentials 调用真实认证接口')
   }
 
   async function loginWithCredentials(username: string, password: string): Promise<Role> {
@@ -55,21 +48,13 @@ export default function useAuth() {
           ? (userInfoRes as any).data
           : userInfoRes
       const backendRole = (userPayload?.role || '').trim() as Role
-      const found = DEMO_ACCOUNTS.find(u => u.username === username.trim())
-      const nextRole: Role = backendRole || (found ? found.role : 'teacher')
+      const nextRole: Role = backendRole || 'teacher'
       // role.value = nextRole
       // isAuthed.value = true
       user.value = { username, role: nextRole }
       return nextRole
     } catch (e) {
-      const found = DEMO_ACCOUNTS.find(u => u.username === username.trim())
-      if (!found || found.password !== password) {
-        throw e
-      }
-      // role.value = found.role
-      // isAuthed.value = true
-      user.value = { username: found.username, role: found.role }
-      return found.role
+      throw e
     }
   }
 

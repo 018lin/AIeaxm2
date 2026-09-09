@@ -3,6 +3,10 @@ export interface ResetPasswordRequest {
   newPassword: string
 }
 
+export interface ForgotPasswordRequest {
+  account: string
+}
+
 // 登录接口请求体
 export interface LoginRequest {
   password: string // 密码
