@@ -21,7 +21,9 @@ function loadEnvFile(file) {
 }
 
 loadEnvFile('.env')
+loadEnvFile('.env.local')
 loadEnvFile('.env.development')
+loadEnvFile('.env.development.local')
 
 function readDbConfig() {
   const url = process.env.DATABASE_URL || process.env.MYSQL_URL
