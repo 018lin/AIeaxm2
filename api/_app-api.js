@@ -270,6 +270,8 @@ export async function executeApi(req, endpoint) {
 
   if (endpoint === 'oauth-logout' && method === 'POST') return ok(true)
 
+  if (endpoint === 'reset-password' && method === 'POST') return ok(true)
+
   if (endpoint !== 'public-key' && endpoint !== 'oauth-login' && !requireAuth(req)) {
     return fail('登录已过期')
   }
@@ -325,6 +327,7 @@ export function createHandler(endpoint) {
 export async function executeByPath(req) {
   const path = new URL(req.url || '/', 'http://localhost').pathname.replace(/^\/app(?=\/)/, '')
   const endpointMap = {
+    // 原始路径（Vercel 非 Next.js 项目中 catch-all 不生效，多段路径经 vercel.json rewrites 转为单段路径后进入）
     '/oauth/public-key': 'public-key',
     '/api/oauth/public-key': 'public-key',
     '/api/v1/oauth/login': 'oauth-login',
@@ -340,6 +343,21 @@ export async function executeByPath(req) {
     '/api/v1/assignment/recent-list': 'recent-assignments',
     '/api/v1/assignment/download': 'assignment-download',
     '/api/v1/assignment/splice': 'assignment-splice',
+    // 单段别名（与 vercel.json 中的 rewrite 目标一一对应）
+    '/api/public-key': 'public-key',
+    '/api/login': 'oauth-login',
+    '/api/refresh-token': 'oauth-refresh-token',
+    '/api/logout': 'oauth-logout',
+    '/api/reset-password': 'reset-password',
+    '/api/permission-info': 'permission-info',
+    '/api/teacher-info': 'teacher-info',
+    '/api/teacher-overview': 'teacher-overview',
+    '/api/student-overview': 'student-overview',
+    '/api/question-statistics': 'question-statistics',
+    '/api/recent-homework': 'recent-homework',
+    '/api/recent-assignments': 'recent-assignments',
+    '/api/assignment-download': 'assignment-download',
+    '/api/assignment-splice': 'assignment-splice',
   }
   const endpoint = endpointMap[path]
   if (!endpoint) return fail('接口不存在', 404)

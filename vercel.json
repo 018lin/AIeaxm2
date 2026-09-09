@@ -1,9 +1,20 @@
 {
   "rewrites": [
-    {
-      "source": "/oauth/public-key",
-      "destination": "/api/oauth/public-key"
-    },
+    { "source": "/oauth/public-key", "destination": "/api/public-key" },
+    { "source": "/api/v1/oauth/login", "destination": "/api/login" },
+    { "source": "/api/v1/oauth/refresh-token", "destination": "/api/refresh-token" },
+    { "source": "/api/v1/auth/refresh-token", "destination": "/api/refresh-token" },
+    { "source": "/api/v1/oauth/logout", "destination": "/api/logout" },
+    { "source": "/api/v1/oauth/reset-password", "destination": "/api/reset-password" },
+    { "source": "/api/v1/oauth/get-permission-info", "destination": "/api/permission-info" },
+    { "source": "/api/v1/teacher/teacher-info", "destination": "/api/teacher-info" },
+    { "source": "/api/v1/teacher/overview", "destination": "/api/teacher-overview" },
+    { "source": "/api/v1/student/overview", "destination": "/api/student-overview" },
+    { "source": "/api/v1/question/statistics", "destination": "/api/question-statistics" },
+    { "source": "/api/v1/student/homework/recent-list", "destination": "/api/recent-homework" },
+    { "source": "/api/v1/assignment/recent-list", "destination": "/api/recent-assignments" },
+    { "source": "/api/v1/assignment/download", "destination": "/api/assignment-download" },
+    { "source": "/api/v1/assignment/splice", "destination": "/api/assignment-splice" },
     {
       "source": "/:path((?!api/).*)",
       "destination": "/index.html"
