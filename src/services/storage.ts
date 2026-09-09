@@ -14,6 +14,7 @@ export const clearUserBaseInfo = () => {
   localStorage.removeItem('accessToken')
   localStorage.removeItem('token')
   localStorage.removeItem('refreshToken')
+  localStorage.removeItem('refresh-token')
   localStorage.removeItem('userBaseInfo')
   localStorage.removeItem('permissions')
   localStorage.removeItem('user')
@@ -25,4 +26,5 @@ export const clearUserBaseInfo = () => {
   localStorage.removeItem('expiresTime')
   localStorage.removeItem('isAuthed')
   localStorage.removeItem('tenantId')
+  localStorage.removeItem('tenant-id')
 }

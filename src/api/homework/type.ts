@@ -295,6 +295,34 @@ export interface AttachmentVO {
 
 export type UploadFileResponse = AttachmentVO
 
+export const AI_GRADING_MATERIAL_SOURCE_OPTIONS = [
+  { source: 'scanner_scan', sourceName: '扫描机扫描' },
+  { source: 'mobile_photo_upload', sourceName: '移动端拍照上传' },
+] as const
+
+export type AiGradingMaterialSource = (typeof AI_GRADING_MATERIAL_SOURCE_OPTIONS)[number]['source']
+
+export interface AiGradingMaterialSourceOption {
+  source: AiGradingMaterialSource
+  sourceName: string
+}
+
+export interface ScannerScanMaterialRequest {
+  assignmentId: string
+  classId?: string
+  scanBatchId?: string
+  source?: Extract<AiGradingMaterialSource, 'scanner_scan'>
+  [property: string]: any
+}
+
+export interface MobilePhotoUploadMaterialRequest extends UploadFileRequest {
+  assignmentId: string
+  classId?: string
+  studentUserId?: string
+  source?: Extract<AiGradingMaterialSource, 'mobile_photo_upload'>
+  [property: string]: any
+}
+
 /**
  * 创建讲解并上传视频 - POST /api/v1/teacher-explanation/create
  */

@@ -1,6 +1,7 @@
 import { requestGet, requestPost, requestPostForm } from '@/api/index'
 import type { AxiosRequestConfig } from 'axios'
 import type {
+  AiGradingMaterialSourceOption,
   AssignmentStatisticsRequest,
   AssignmentStatisticsVO,
   ClassHomeworkDetailRequest,
@@ -10,9 +11,11 @@ import type {
   ManualGradingHomeworkVO,
   ManualGradingListRequest,
   ManualGradingRequest,
+  MobilePhotoUploadMaterialRequest,
   OriginalDetailVO,
   QuestionStatisticsRequest,
   QuestionStatisticsVO,
+  ScannerScanMaterialRequest,
   StudentStatisticsRequest,
   StudentStatisticsVO,
   TeacherExplanationCreateRequest,
@@ -76,6 +79,27 @@ export function submitManualGrading(params: ManualGradingRequest) {
 // 上传文件（文件流）
 export function uploadFile(params: UploadFileRequest, config?: AxiosRequestConfig) {
   return requestPostForm<UploadFileResponse, UploadFileRequest>('/api/v1/file/upload', params, config)
+}
+
+// AI 阅卷素材来源只保留：扫描机扫描、移动端拍照上传
+export function getAiGradingMaterialSources() {
+  return requestGet<AiGradingMaterialSourceOption[]>('/api/v1/student/homework/material-sources')
+}
+
+export function createScannerScanMaterial(params: ScannerScanMaterialRequest, config?: AxiosRequestConfig) {
+  return requestPost<boolean, ScannerScanMaterialRequest>(
+    '/api/v1/student/homework/material/scanner-scan',
+    { ...params, source: 'scanner_scan' },
+    config
+  )
+}
+
+export function uploadMobilePhotoMaterial(params: MobilePhotoUploadMaterialRequest, config?: AxiosRequestConfig) {
+  return requestPostForm<UploadFileResponse, MobilePhotoUploadMaterialRequest>(
+    '/api/v1/student/homework/material/mobile-photo/upload',
+    { ...params, source: 'mobile_photo_upload' },
+    config
+  )
 }
 
 // 创建讲解（videoAttaId 使用上传接口返回的 attachmentId）

@@ -39,7 +39,9 @@ export default function useAuth() {
       const access = payload?.access_token || payload?.accessToken
       const refresh = payload?.refresh_token || payload?.refreshToken
       if (!access) throw new Error('令牌获取失败')
+      localStorage.setItem('accessToken', access)
       localStorage.setItem('token', access)
+      if (refresh) localStorage.setItem('refreshToken', refresh)
       if (refresh) localStorage.setItem('refresh-token', refresh)
 
       const userInfoRes = await httpGet<any>('/system/oauth2/user/get')

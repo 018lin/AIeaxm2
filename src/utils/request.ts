@@ -152,8 +152,7 @@ service.interceptors.response.use(
       }
       if (res.code === 401) {
         // 未登录或登录过期
-        localStorage.removeItem('token')
-        localStorage.removeItem('refresh-token')
+        clearUserBaseInfo()
         // 可以按需跳转登录页
         if (window.location.pathname !== '/auth/login') {
           window.location.href = '/auth/login'
@@ -180,7 +179,10 @@ service.interceptors.response.use(
         originalRequest._retry = true
         try {
           const token = await handleTokenRefresh()
-          originalRequest.headers.Authorization = `Bearer ${token}`
+          originalRequest.headers = {
+            ...(originalRequest.headers || {}),
+            Authorization: `Bearer ${token}`,
+          } as any
           return service(originalRequest)
         } catch (refreshError) {
           return Promise.reject(refreshError)

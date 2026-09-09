@@ -1,5 +1,6 @@
 import type { AxiosError, AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios'
 import axios from 'axios'
+import { clearUserBaseInfo } from './storage'
 
 // 性能优化配置
 const CACHE_TTL = 5 * 60 * 1000 // 5分钟缓存
@@ -77,8 +78,8 @@ function handleError(error: AxiosError): void {
     const status = error.response.status
     if (status === 401) {
       // 未授权，清除token并跳转登录
-      localStorage.removeItem('token')
-      window.location.href = '/login'
+      clearUserBaseInfo()
+      window.location.href = '/auth/login'
     } else if (status === 403) {
       // 无权限
       console.error('无权限访问')
@@ -104,8 +105,8 @@ interface ExtendedAxiosRequestConfig extends InternalAxiosRequestConfig {
 
 api.interceptors.request.use(async (config: ExtendedAxiosRequestConfig) => {
   // 添加认证token
-  const token = localStorage.getItem('token')
-  const tenantId = localStorage.getItem('tenant-id')
+  const token = localStorage.getItem('accessToken') || localStorage.getItem('token')
+  const tenantId = localStorage.getItem('tenantId') || localStorage.getItem('tenant-id')
   const headers: Record<string, string> = { ...(config.headers || {}) }
   if (!headers.Authorization && token) headers.Authorization = `Bearer ${token}`
   const isTenantResolveUrl = typeof config.url === 'string' && config.url.includes('/system/tenant/get-id-by-name')
@@ -115,9 +116,11 @@ api.interceptors.request.use(async (config: ExtendedAxiosRequestConfig) => {
     if (currentTenant) {
       if (/^\d+$/.test(currentTenant)) {
         headers['tenant-id'] = currentTenant
+        localStorage.setItem('tenantId', currentTenant)
       } else {
         const numeric = await resolveTenantId(currentTenant)
         headers['tenant-id'] = numeric || encodeURIComponent(currentTenant)
+        if (numeric) localStorage.setItem('tenantId', numeric)
       }
     }
   }
