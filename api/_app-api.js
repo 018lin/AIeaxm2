@@ -326,6 +326,7 @@ export async function executeByPath(req) {
   const path = new URL(req.url || '/', 'http://localhost').pathname.replace(/^\/app(?=\/)/, '')
   const endpointMap = {
     '/oauth/public-key': 'public-key',
+    '/api/oauth/public-key': 'public-key',
     '/api/v1/oauth/login': 'oauth-login',
     '/api/v1/oauth/refresh-token': 'oauth-refresh-token',
     '/api/v1/auth/refresh-token': 'oauth-refresh-token',
