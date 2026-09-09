@@ -137,7 +137,7 @@ async function onSubmit() {
     message.success('登录成功')
     router.push(ROUTES.TEACHER_DASHBOARD).catch(() => {})
   } catch (e: any) {
-    // request.ts 拦截器已经处理了 message.error，和console.error，这里不再重复弹窗
+    message.error(e?.message || '登录失败，请确认后端服务已启动')
   } finally {
     loading.value = false
   }

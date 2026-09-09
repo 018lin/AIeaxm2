@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/oauth/public-key",
+      "destination": "/api/oauth/public-key"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

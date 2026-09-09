@@ -25,6 +25,9 @@ export default function useAuth() {
     // role.value = nextRole
     // isAuthed.value = true
     user.value = { username: nextRole, role: nextRole }
+    localStorage.setItem('isAuthed', 'true')
+    localStorage.setItem('accessToken', 'mock-access-token')
+    localStorage.setItem('token', 'mock-access-token')
   }
 
   async function loginWithCredentials(username: string, password: string, tenantId?: string): Promise<Role> {
@@ -40,6 +43,7 @@ export default function useAuth() {
       const { accessToken, refreshToken, expiresTime, tenantId: resTenantId } = loginRes
 
       localStorage.setItem('accessToken', accessToken)
+      localStorage.setItem('token', accessToken)
       localStorage.setItem('refreshToken', refreshToken)
       localStorage.setItem('expiresTime', expiresTime)
       if (resTenantId) localStorage.setItem('tenantId', resTenantId)
@@ -52,6 +56,7 @@ export default function useAuth() {
       localStorage.setItem('roles', JSON.stringify(roles || []))
       localStorage.setItem('permissions', JSON.stringify(permissions))
       localStorage.setItem('userInfo', JSON.stringify(userInfo))
+      localStorage.setItem('isAuthed', 'true')
 
       // 5. 获取用户基本信息
       if (loginRes.userId) {

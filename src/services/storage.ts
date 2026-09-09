@@ -12,6 +12,7 @@ export const getUserBaseInfo = () => {
 // clearUserBaseInfo 清除用户基本信息
 export const clearUserBaseInfo = () => {
   localStorage.removeItem('accessToken')
+  localStorage.removeItem('token')
   localStorage.removeItem('refreshToken')
   localStorage.removeItem('userBaseInfo')
   localStorage.removeItem('permissions')

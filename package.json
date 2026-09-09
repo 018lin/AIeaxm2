@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server:mock": "node backend/mock-server.mjs",
     "build": "vite build",
     "build:local": "NODE_OPTIONS=--max-old-space-size=8192 vite build",
     "build:dev": "NODE_OPTIONS=--max-old-space-size=8192 vite build --mode development",
