@@ -2,62 +2,10 @@
   "rewrites": [
     {
       "source": "/oauth/public-key",
-      "destination": "/api/backend/public-key"
+      "destination": "/api/oauth/public-key"
     },
     {
-      "source": "/api/v1/oauth/login",
-      "destination": "/api/backend/oauth-login"
-    },
-    {
-      "source": "/api/v1/oauth/refresh-token",
-      "destination": "/api/backend/oauth-refresh-token"
-    },
-    {
-      "source": "/api/v1/auth/refresh-token",
-      "destination": "/api/backend/oauth-refresh-token"
-    },
-    {
-      "source": "/api/v1/oauth/logout",
-      "destination": "/api/backend/oauth-logout"
-    },
-    {
-      "source": "/api/v1/oauth/get-permission-info",
-      "destination": "/api/backend/permission-info"
-    },
-    {
-      "source": "/api/v1/teacher/teacher-info",
-      "destination": "/api/backend/teacher-info"
-    },
-    {
-      "source": "/api/v1/teacher/overview",
-      "destination": "/api/backend/teacher-overview"
-    },
-    {
-      "source": "/api/v1/student/overview",
-      "destination": "/api/backend/student-overview"
-    },
-    {
-      "source": "/api/v1/question/statistics",
-      "destination": "/api/backend/question-statistics"
-    },
-    {
-      "source": "/api/v1/student/homework/recent-list",
-      "destination": "/api/backend/recent-homework"
-    },
-    {
-      "source": "/api/v1/assignment/recent-list",
-      "destination": "/api/backend/recent-assignments"
-    },
-    {
-      "source": "/api/v1/assignment/download",
-      "destination": "/api/backend/assignment-download"
-    },
-    {
-      "source": "/api/v1/assignment/splice",
-      "destination": "/api/backend/assignment-splice"
-    },
-    {
-      "source": "/(.*)",
+      "source": "/:path((?!api/).*)",
       "destination": "/index.html"
     }
   ]

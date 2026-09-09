@@ -12,7 +12,7 @@ const routes = [
         path: '',
         // 动态默认界面：未登录跳登录，已登录跳仪表盘
         redirect: () => {
-          const isAuthed = localStorage.getItem('isAuthed') === 'true'
+          const isAuthed = localStorage.getItem('isAuthed') === 'true' || Boolean(localStorage.getItem('accessToken'))
           return isAuthed ? '/dashboard' : '/auth/login'
         },
       },
@@ -327,7 +327,7 @@ router.beforeEach((to, from, next) => {
     // 路由守卫日志（开发环境）
     console.info('[router] navigate:', { from: from.path, to: to.path })
   }
-  const accessToken = localStorage.getItem('accessToken')
+  const accessToken = localStorage.getItem('accessToken') || localStorage.getItem('token')
   // const role = (localStorage.getItem('role') || 'teacher') as 'teacher' | 'student' | 'admin' | 'edu_affairs'
   const isPublic = to.meta.public === true || to.path.startsWith('/auth')
 

@@ -10,7 +10,7 @@ const router = useRouter()
 const hasRouter = !!router && typeof (router as any).replace === 'function'
 
 onMounted(() => {
-  const isAuthed = localStorage.getItem('isAuthed') === 'true'
+  const isAuthed = localStorage.getItem('isAuthed') === 'true' || Boolean(localStorage.getItem('accessToken'))
   if (!isAuthed) {
     if (hasRouter) router.replace('/auth/login')
     else window.location.assign('/auth/login')

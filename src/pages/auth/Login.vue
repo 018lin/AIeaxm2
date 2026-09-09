@@ -135,7 +135,10 @@ async function onSubmit() {
   try {
     await loginWithCredentials(form.username, form.password, form.tenantId)
     message.success('登录成功')
-    router.push(ROUTES.TEACHER_DASHBOARD).catch(() => {})
+    await router.replace(ROUTES.TEACHER_DASHBOARD)
+    if (router.currentRoute.value.path === ROUTES.AUTH_LOGIN) {
+      window.location.assign(ROUTES.TEACHER_DASHBOARD)
+    }
   } catch (e: any) {
     message.error(e?.message || '登录失败，请确认后端服务已启动')
   } finally {
