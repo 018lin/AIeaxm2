@@ -12,7 +12,11 @@ const requestCache = new Map<string, { data: any; timestamp: number }>()
 const pendingRequests = new Map<string, Promise<any>>()
 
 // const useMock = String(import.meta.env.VITE_USE_MOCK) === 'true'
-const baseURL = (import.meta as any).env.VITE_API_BASE || ''
+const configuredBaseURL = (import.meta as any).env.VITE_API_BASE || ''
+const baseURL =
+  (import.meta as any).env.PROD && /^https?:\/\/(localhost|127\.0\.0\.1)(?::\d+)?/i.test(configuredBaseURL)
+    ? ''
+    : configuredBaseURL
 const bareApi = axios.create({ baseURL, timeout: 30000 })
 const tenantResolveCache = new Map<string, Promise<string>>()
 

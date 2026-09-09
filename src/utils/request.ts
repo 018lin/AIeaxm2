@@ -9,7 +9,11 @@ import axios, {
 } from 'axios'
 
 // 基础配置
-const baseURL: string = (import.meta as any).env.VITE_API_BASE || ''
+const configuredBaseURL: string = (import.meta as any).env.VITE_API_BASE || ''
+const baseURL: string =
+  (import.meta as any).env.PROD && /^https?:\/\/(localhost|127\.0\.0\.1)(?::\d+)?/i.test(configuredBaseURL)
+    ? ''
+    : configuredBaseURL
 
 /**
  * 创建 axios 实例
