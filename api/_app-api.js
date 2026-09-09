@@ -334,6 +334,7 @@ export async function executeByPath(req) {
     '/api/v1/oauth/refresh-token': 'oauth-refresh-token',
     '/api/v1/auth/refresh-token': 'oauth-refresh-token',
     '/api/v1/oauth/logout': 'oauth-logout',
+    '/api/v1/oauth/reset-password': 'reset-password',
     '/api/v1/oauth/get-permission-info': 'permission-info',
     '/api/v1/teacher/teacher-info': 'teacher-info',
     '/api/v1/teacher/overview': 'teacher-overview',
