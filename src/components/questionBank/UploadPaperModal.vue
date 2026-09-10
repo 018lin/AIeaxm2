@@ -46,30 +46,6 @@
                 </a-select-option>
               </a-select>
             </div>
-            <div>
-              <div class="input-label">类型</div>
-              <a-select v-model:value="form.questionBankTypeId" class="rc-select" placeholder="请选择类型">
-                <a-select-option v-for="item in itemTypeList" :key="item.dictValue" :value="item.dictValue">
-                  {{ item.label }}
-                </a-select-option>
-              </a-select>
-            </div>
-            <div>
-              <div class="input-label">教材版本</div>
-              <a-select v-model:value="form.textbookVersionId" class="rc-select" placeholder="请选择教材版本">
-                <a-select-option v-for="item in versionList" :key="item.dictValue" :value="item.dictValue">
-                  {{ item.label }}
-                </a-select-option>
-              </a-select>
-            </div>
-            <div>
-              <div class="input-label">册次</div>
-              <a-select v-model:value="form.volume" class="rc-select" placeholder="请选择册次">
-                <a-select-option v-for="item in volumeList" :key="item.dictValue" :value="item.dictValue">
-                  {{ item.label }}
-                </a-select-option>
-              </a-select>
-            </div>
             <div class="select-item">
               <div class="input-label">章节（选填）</div>
               <a-tooltip :title="chapterSelectTip" :mouse-enter-delay="0.08" :mouse-leave-delay="0.08">
@@ -225,7 +201,8 @@ const chapterSelectDisabled = computed(() => {
 
 const chapterSelectTip = computed(() => {
   if (!chapterSelectDisabled.value) return ''
-  return '请先选择学科，版本，册次，年级'
+  if (!form.subject || !form.gradeId) return '请先选择科目和年级'
+  return '章节配置加载中，请稍后再试'
 })
 
 // 切换学段时，重置年级
@@ -275,6 +252,13 @@ const getDictData = async () => {
   itemTypeList.value = getDictItems(resData, selectEnum.ITEM_TYPE)
   versionList.value = getDictItems(resData, selectEnum.TEXTBOOK_VERSION)
   volumeList.value = getDictItems(resData, selectEnum.TEXTBOOK_VOLUME)
+  fillHiddenDefaults()
+}
+
+const fillHiddenDefaults = () => {
+  form.questionBankTypeId = form.questionBankTypeId || itemTypeList.value[0]?.dictValue
+  form.textbookVersionId = form.textbookVersionId || versionList.value[0]?.dictValue
+  form.volume = form.volume || volumeList.value[0]?.dictValue
 }
 
 // 选择文件：限制格式并拦截自动上传，仅保留当前选择的文件。
@@ -331,9 +315,10 @@ const handleOk = async () => {
   if (!form.stageId) return message.warning('请选择学段')
   if (!form.gradeId) return message.warning('请选择年级')
   if (!form.subject) return message.warning('请选择学科')
-  if (!form.questionBankTypeId) return message.warning('请选择类型')
-  if (!form.textbookVersionId) return message.warning('请选择教材版本')
-  if (!form.volume) return message.warning('请选择册次')
+  fillHiddenDefaults()
+  if (!form.questionBankTypeId || !form.textbookVersionId || !form.volume) {
+    return message.error('题目录入配置加载失败，请刷新后重试')
+  }
 
   const files = extractFiles(form.fileList)
   if (files.length === 0) return message.warning('请上传文件')
@@ -387,7 +372,7 @@ const handleOk = async () => {
     resetForm()
     emit('update:open', false)
   } catch (e: any) {
-    const msg = e?.message || '试卷上传失败'
+    const msg = e?.message || '题目录入失败'
     message.error(msg)
   } finally {
     /* 切片上传
@@ -490,6 +475,7 @@ watch(
   open => {
     if (!open) return
     if (subjectList.value.length && itemTypeList.value.length && versionList.value.length && volumeList.value.length) {
+      fillHiddenDefaults()
       return
     }
     getDictData().catch(() => {
