@@ -1645,6 +1645,9 @@ async function ensureQuestionImportSchema() {
       detail_id VARCHAR(120) NOT NULL,
       exam_title VARCHAR(500) NOT NULL,
       import_format VARCHAR(40) NOT NULL,
+      question_bank_type_id VARCHAR(40) NULL,
+      textbook_version_id VARCHAR(40) NULL,
+      volume VARCHAR(40) NULL,
       stage_id VARCHAR(40) NULL,
       source_exam_id VARCHAR(80) NULL,
       external_question_id VARCHAR(120) NULL,
@@ -1666,6 +1669,9 @@ async function ensureQuestionImportSchema() {
     )
   `)
   await ensureTableColumn('homework_question_import_meta', 'stage_id', 'VARCHAR(40) NULL')
+  await ensureTableColumn('homework_question_import_meta', 'question_bank_type_id', 'VARCHAR(40) NULL')
+  await ensureTableColumn('homework_question_import_meta', 'textbook_version_id', 'VARCHAR(40) NULL')
+  await ensureTableColumn('homework_question_import_meta', 'volume', 'VARCHAR(40) NULL')
   questionImportSchemaReady = true
 }
 
@@ -1735,6 +1741,17 @@ function questionImportTypeName(importFormat = '') {
   return '题库'
 }
 
+function questionBankTypeName(itemType = '') {
+  const map = {
+    sync: '同步练习',
+    weekly: '周测',
+    monthly: '月考',
+    midTerm: '期中',
+    finalTerm: '期末',
+  }
+  return map[String(itemType || '')] || ''
+}
+
 function getImagePairFiles(files = []) {
   const imageFiles = files.filter(isImageFile)
   const questionFiles = files.filter(file => file.fieldName === 'questionFiles' && isImageFile(file))
@@ -1751,6 +1768,7 @@ export const __test = {
   getImagePairFiles,
   imageHtml,
   questionImportTypeName,
+  questionBankTypeName,
 }
 
 function extractImageRefsFromHtml(html = '') {
@@ -1906,14 +1924,18 @@ async function importExamcooQuestionBank(req) {
 
     await query(
       `INSERT INTO homework_question_import_meta
-        (question_id, batch_id, detail_id, exam_title, import_format, stage_id, source_exam_id, external_question_id, original_no,
+        (question_id, batch_id, detail_id, exam_title, import_format, question_bank_type_id, textbook_version_id, volume,
+         stage_id, source_exam_id, external_question_id, original_no,
          section_title, stem_html, answer_html, correct_answer, options_json, images_json, creator, tenant_id)
-       VALUES (?, ?, ?, ?, 'examcoo_json', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, 'examcoo_json', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         questionId,
         batchId,
         detailId,
         examTitle,
+        String(fields.questionBankTypeId || ''),
+        String(fields.textbookVersionId || ''),
+        String(fields.volume || ''),
         String(fields.stageId || ''),
         String(payload.exam_id || ''),
         externalQuestionId,
@@ -1998,14 +2020,18 @@ async function importImagePairQuestionBank({ fields, files, user }) {
 
     await query(
       `INSERT INTO homework_question_import_meta
-        (question_id, batch_id, detail_id, exam_title, import_format, stage_id, source_exam_id, external_question_id, original_no,
+        (question_id, batch_id, detail_id, exam_title, import_format, question_bank_type_id, textbook_version_id, volume,
+         stage_id, source_exam_id, external_question_id, original_no,
          section_title, stem_html, answer_html, correct_answer, options_json, images_json, creator, tenant_id)
-       VALUES (?, ?, ?, ?, 'image_pairs', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, 'image_pairs', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         questionId,
         batchId,
         detailId,
         examTitle,
+        String(fields.questionBankTypeId || ''),
+        String(fields.textbookVersionId || ''),
+        String(fields.volume || ''),
         String(fields.stageId || ''),
         batchId,
         `${no}-${normalizeFileName(questionFile.fileName || '')}`,
@@ -2136,11 +2162,21 @@ async function questionBankDetailPage(req) {
     await ensureQuestionImportSchema()
     const body = await readBody(req)
     const { pageNo, pageSize, offset } = pageInput(body)
-    const clauses = ["q.deleted = b'0'"]
-    const values = []
-    pushEquals(clauses, values, 'q.grade', body.gradeId)
-    pushEquals(clauses, values, 'q.subject', body.subjectId)
-    const where = clauses.join(' AND ')
+    const baseClauses = ["q.deleted = b'0'"]
+    const baseValues = []
+    pushEquals(baseClauses, baseValues, 'q.grade', body.gradeId)
+    pushEquals(baseClauses, baseValues, 'q.subject', body.subjectId)
+
+    const metaClauses = [...baseClauses]
+    const metaValues = [...baseValues]
+    pushEquals(metaClauses, metaValues, 'm.question_bank_type_id', body.itemType)
+
+    const localClauses = [...baseClauses]
+    const localValues = [...baseValues]
+    if (body.itemType) localClauses.push('1 = 0')
+
+    const metaWhere = metaClauses.join(' AND ')
+    const localWhere = localClauses.join(' AND ')
     const [totalRow, rows] = await Promise.all([
       queryOne(
         `SELECT COUNT(*) AS n
@@ -2148,16 +2184,16 @@ async function questionBankDetailPage(req) {
            SELECT m.detail_id
            FROM homework_question_import_meta m
            JOIN homework_questions q ON q.id = m.question_id
-           WHERE ${where} AND m.deleted = 0
+           WHERE ${metaWhere} AND m.deleted = 0
            GROUP BY m.detail_id
            UNION ALL
            SELECT CONCAT('local-', q.subject, '-', q.grade) AS detail_id
            FROM homework_questions q
            LEFT JOIN homework_question_import_meta m ON m.question_id = q.id AND m.deleted = 0
-           WHERE ${where} AND m.question_id IS NULL
+           WHERE ${localWhere} AND m.question_id IS NULL
            GROUP BY q.subject, q.grade
          ) x`,
-        [...values, ...values]
+        [...metaValues, ...localValues]
       ),
       query(
         `SELECT
@@ -2166,6 +2202,9 @@ async function questionBankDetailPage(req) {
           m.batch_id AS batchId,
           m.exam_title AS examTitle,
           m.import_format AS importFormat,
+          COALESCE(m.question_bank_type_id, '') AS itemType,
+          COALESCE(m.textbook_version_id, '') AS textbookVersionId,
+          COALESCE(m.volume, '') AS volume,
           COALESCE(m.stage_id, '') AS stageId,
           q.subject AS subjectId,
           q.subject AS subjectName,
@@ -2177,8 +2216,8 @@ async function questionBankDetailPage(req) {
           COUNT(*) AS questionCount
          FROM homework_question_import_meta m
          JOIN homework_questions q ON q.id = m.question_id
-         WHERE ${where} AND m.deleted = 0
-         GROUP BY m.detail_id, m.batch_id, m.exam_title, m.import_format, m.stage_id, q.subject, q.grade, m.creator
+         WHERE ${metaWhere} AND m.deleted = 0
+         GROUP BY m.detail_id, m.batch_id, m.exam_title, m.import_format, m.question_bank_type_id, m.textbook_version_id, m.volume, m.stage_id, q.subject, q.grade, m.creator
          UNION ALL
          SELECT
           MIN(q.id) AS id,
@@ -2186,6 +2225,9 @@ async function questionBankDetailPage(req) {
           CONCAT('local-', q.subject, '-', q.grade) AS batchId,
           CONCAT(q.grade, q.subject, '题库') AS examTitle,
           'local' AS importFormat,
+          '' AS itemType,
+          '' AS textbookVersionId,
+          '' AS volume,
           '' AS stageId,
           q.subject AS subjectId,
           q.subject AS subjectName,
@@ -2197,11 +2239,11 @@ async function questionBankDetailPage(req) {
           COUNT(*) AS questionCount
          FROM homework_questions q
          LEFT JOIN homework_question_import_meta m ON m.question_id = q.id AND m.deleted = 0
-         WHERE ${where} AND m.question_id IS NULL
+         WHERE ${localWhere} AND m.question_id IS NULL
          GROUP BY q.subject, q.grade
          ORDER BY updateTime DESC, id DESC
          LIMIT ?, ?`,
-        [...values, ...values, offset, pageSize]
+        [...metaValues, ...localValues, offset, pageSize]
       ),
     ])
     const total = Number(totalRow?.n || 0)
@@ -2219,9 +2261,16 @@ async function questionBankDetailPage(req) {
         stageName: '',
         termId: '',
         termName: '',
-        itemType: String(row.importFormat || (String(row.detailId || '').startsWith('local-') ? 'local' : 'examcoo_json')),
-        itemTypeName: questionImportTypeName(row.importFormat || (String(row.detailId || '').startsWith('local-') ? 'local' : 'examcoo_json')),
-        typeName: questionImportTypeName(row.importFormat || (String(row.detailId || '').startsWith('local-') ? 'local' : 'examcoo_json')),
+        itemType: String(row.itemType || (String(row.detailId || '').startsWith('local-') ? 'local' : '')),
+        itemTypeName:
+          questionBankTypeName(row.itemType) ||
+          questionImportTypeName(row.importFormat || (String(row.detailId || '').startsWith('local-') ? 'local' : '')),
+        typeName:
+          questionBankTypeName(row.itemType) ||
+          questionImportTypeName(row.importFormat || (String(row.detailId || '').startsWith('local-') ? 'local' : '')),
+        importFormat: row.importFormat || '',
+        textbookVersionId: row.textbookVersionId || '',
+        volume: row.volume || '',
         auditStatus: 'AUDIT_PASS',
         creatorName: row.creator || '导入数据',
         createTime: toDateTime(row.createTime),
@@ -2247,6 +2296,9 @@ async function questionBankDetailByPath(req) {
         m.batch_id AS batchId,
         m.exam_title AS examTitle,
         m.import_format AS importFormat,
+        COALESCE(m.question_bank_type_id, '') AS itemType,
+        COALESCE(m.textbook_version_id, '') AS textbookVersionId,
+        COALESCE(m.volume, '') AS volume,
         COALESCE(m.stage_id, '') AS stageId,
         q.subject AS subjectId,
         q.subject AS subjectName,
@@ -2257,7 +2309,7 @@ async function questionBankDetailByPath(req) {
        FROM homework_question_import_meta m
        JOIN homework_questions q ON q.id = m.question_id
        WHERE q.deleted = b'0' AND m.deleted = 0 AND m.detail_id = ?
-       GROUP BY m.detail_id, m.batch_id, m.exam_title, m.import_format, m.stage_id, q.subject, q.grade
+       GROUP BY m.detail_id, m.batch_id, m.exam_title, m.import_format, m.question_bank_type_id, m.textbook_version_id, m.volume, m.stage_id, q.subject, q.grade
        LIMIT 1`,
       [detailId]
     )
@@ -2313,8 +2365,11 @@ async function questionBankDetailByPath(req) {
       stageId: row.stageId || '',
       subjectId: row.subjectId,
       subjectName: row.subjectName,
-      itemType: row.importFormat || 'examcoo_json',
-      itemTypeName: questionImportTypeName(row.importFormat || 'examcoo_json'),
+      itemType: row.itemType || '',
+      itemTypeName: questionBankTypeName(row.itemType) || questionImportTypeName(row.importFormat || 'examcoo_json'),
+      importFormat: row.importFormat || 'examcoo_json',
+      textbookVersionId: row.textbookVersionId || '',
+      volume: row.volume || '',
       auditStatus: 'AUDIT_PASS',
       createTime: toDateTime(row.createTime),
       updateTime: toDateTime(row.updateTime || row.createTime),

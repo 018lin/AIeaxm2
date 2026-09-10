@@ -55,13 +55,10 @@ export function requestPostForm<T = any, B = any>(url: string, params?: B, confi
     })
   }
 
-  // 合并配置，确保使用 multipart/form-data
+  // FormData 的 Content-Type 需要由浏览器/axios 自动补 boundary。
   const mergedConfig: AxiosRequestConfig = {
     ...(config || {}),
-    headers: {
-      ...(config?.headers || {}),
-      'Content-Type': 'multipart/form-data',
-    },
+    headers: config?.headers,
   }
 
   return post<T>(url, formData, mergedConfig)

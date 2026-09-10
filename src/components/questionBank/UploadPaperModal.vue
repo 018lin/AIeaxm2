@@ -534,8 +534,25 @@ const handleOk = async () => {
 
     const importResult = await importQuestionBankBatch(params)
 
+    const hasImportedQuestionCount = Object.prototype.hasOwnProperty.call(importResult || {}, 'importedQuestionCount')
     const importedCount = Number(importResult?.importedQuestionCount || 0)
-    message.success(importedCount > 0 ? `题目录入成功，已导入 ${importedCount} 道题` : '题目录入成功')
+    const successCount = Number(importResult?.successCount || 0)
+    const failedCount = Number(importResult?.failedCount || 0)
+
+    if (hasImportedQuestionCount && importedCount <= 0) {
+      throw new Error('题目录入接口未返回实际导入题目，请检查文件内容或数据库写入结果')
+    }
+    if (!hasImportedQuestionCount && successCount <= 0) {
+      throw new Error('题目录入接口未返回成功结果，请检查后端导入状态')
+    }
+
+    const successText =
+      importedCount > 0
+        ? `题目录入成功，已导入 ${importedCount} 道题`
+        : failedCount > 0
+          ? `题目录入完成，成功 ${successCount} 个，失败 ${failedCount} 个`
+          : `题目录入成功，成功 ${successCount} 个`
+    message.success(successText)
     emit('submit', { ...submitSnapshot, importResult } as typeof submitSnapshot & {
       importResult?: ImportQuestionBankBatchResponse
     })

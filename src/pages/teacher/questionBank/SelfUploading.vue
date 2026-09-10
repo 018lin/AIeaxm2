@@ -320,9 +320,17 @@ const handleDeletePaper = async (paper: PaperCard) => {
 }
 
 // 上传弹窗提交回调：上传成功后回到第一页并刷新列表
-const handleUploadSubmit = (_payload: any) => {
+const handleUploadSubmit = async (payload: any) => {
   currentPage.value = 1
-  fetchPapers()
+  await fetchPapers()
+
+  const detailId = String(payload?.importResult?.detailId || '').trim()
+  if (!detailId) return
+
+  const existsInList = papers.value.some(paper => getPaperDetailId(paper) === detailId)
+  if (!existsInList) {
+    message.warning('题目录入接口已返回成功批次，但列表未查询到该批次，请检查数据库写入与列表筛选条件')
+  }
 }
 
 type SubjectKey = 'math' | 'chinese' | 'english' | 'other'
