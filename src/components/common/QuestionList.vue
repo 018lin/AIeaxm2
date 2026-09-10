@@ -61,6 +61,8 @@
             />
           </template>
 
+          <div v-else-if="hasQuestionContent(q)" class="q-text" v-html="renderQuestionContent(q.questionContent)" />
+
           <a-empty v-else :image="simpleImage" description="暂无数据" />
         </div>
         <div class="q-footer" v-if="source === 'BANK' || source === 'DETAIL'">
@@ -100,7 +102,7 @@
             <span class="ans-badge">正确答案</span>
             <div class="ans-text-box">
               <div class="ans-text" v-for="ite in q.answers" :key="ite.area_id">
-                <span>空{{ ite.area_id }}：</span>{{ ite.answer }}
+                <span>空{{ ite.area_id }}：</span><span v-html="renderQuestionContent(String(ite.answer || ''))" />
               </div>
             </div>
           </div>
@@ -169,6 +171,40 @@ watch(
   },
   { immediate: true }
 )
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
+const hasQuestionContent = (q: questionBankItem) => String(q.questionContent || '').trim().length > 0
+
+const renderQuestionContent = (content?: string) => {
+  const raw = String(content || '').trim()
+  if (!raw) return ''
+
+  if (typeof DOMParser === 'undefined') {
+    return escapeHtml(raw).replace(/\r?\n/g, '<br>')
+  }
+
+  const doc = new DOMParser().parseFromString(raw, 'text/html')
+  doc.querySelectorAll('script, style, iframe, object, embed, link, meta').forEach(el => el.remove())
+  doc.body.querySelectorAll('*').forEach(el => {
+    Array.from(el.attributes).forEach(attr => {
+      const name = attr.name.toLowerCase()
+      const value = attr.value.trim()
+      if (name.startsWith('on') || ((name === 'src' || name === 'href') && /^javascript:/i.test(value))) {
+        el.removeAttribute(attr.name)
+      }
+    })
+  })
+
+  const html = doc.body.innerHTML.trim()
+  return html || escapeHtml(raw).replace(/\r?\n/g, '<br>')
+}
 
 // 显示答案
 const toggleAnswer = (q: questionBankItem) => {
@@ -428,6 +464,35 @@ const deleteQuestion = async (item: questionBankItem) => {
           -moz-user-select: none;
           -ms-user-select: none;
           pointer-events: auto;
+        }
+
+        .q-text {
+          max-width: 100%;
+          white-space: normal;
+          word-break: break-word;
+
+          :deep(img) {
+            max-width: 600px;
+            width: auto;
+            height: auto;
+            display: block;
+            margin: 8px 0;
+            border-radius: 8px;
+            mix-blend-mode: darken;
+            user-select: none;
+          }
+
+          :deep(table) {
+            max-width: 100%;
+            border-collapse: collapse;
+            margin: 8px 0;
+          }
+
+          :deep(td),
+          :deep(th) {
+            padding: 4px 8px;
+            border: 1px solid #d9d9d9;
+          }
         }
       }
 

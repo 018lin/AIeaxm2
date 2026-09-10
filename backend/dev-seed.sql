@@ -113,6 +113,31 @@ CREATE TABLE IF NOT EXISTS homework_questions (
   KEY idx_subject_grade (subject, grade)
 );
 
+CREATE TABLE IF NOT EXISTS homework_question_import_meta (
+  question_id BIGINT PRIMARY KEY,
+  batch_id VARCHAR(80) NOT NULL,
+  detail_id VARCHAR(120) NOT NULL,
+  exam_title VARCHAR(500) NOT NULL,
+  import_format VARCHAR(40) NOT NULL,
+  source_exam_id VARCHAR(80) NULL,
+  external_question_id VARCHAR(120) NULL,
+  original_no INT NULL,
+  section_title VARCHAR(500) NULL,
+  stem_html MEDIUMTEXT NULL,
+  answer_html MEDIUMTEXT NULL,
+  correct_answer TEXT NULL,
+  options_json MEDIUMTEXT NULL,
+  images_json MEDIUMTEXT NULL,
+  creator VARCHAR(64) DEFAULT '',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted TINYINT(1) NOT NULL DEFAULT 0,
+  tenant_id BIGINT NOT NULL DEFAULT 1,
+  UNIQUE KEY uk_import_external (import_format, source_exam_id, external_question_id),
+  KEY idx_detail_id (detail_id),
+  KEY idx_batch_id (batch_id)
+);
+
 CREATE TABLE IF NOT EXISTS homework_assignment_question (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   assignment_id BIGINT NOT NULL,

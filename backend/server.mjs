@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { executeByPath, sendJson } from '../api/_app-api.js'
 
-const port = Number(process.env.APP_API_PORT || process.env.PORT || 48080)
+const port = Number(process.env.APP_API_PORT || process.env.PORT || 48180)
 
 const server = createServer((req, res) => {
   if (req.method === 'OPTIONS') return sendJson(res, 204, {})

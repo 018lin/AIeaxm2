@@ -7,6 +7,7 @@ export interface ImportQuestionBankBatchRequest {
   textbookVersionId: string // 教材版本 ID
   volume: string // 教材册次 ID
   files: File[] // 上传文件列表
+  importFormat?: 'examcoo_json' // 导入格式：Examcoo JSON 题库
   chapterId?: string // 章节 ID（可选，后端根据需要决定是否使用）
 }
 
@@ -42,6 +43,10 @@ export interface ImportQuestionBankBatchResponse {
   failedFiles?: FailedFileInfoVO[] // 失败文件列表
   batchId?: string // 批次 ID
   directoryPath?: string // 目录路径
+  importedQuestionCount?: number // JSON 题库成功导入题目数
+  skippedQuestionCount?: number // JSON 题库跳过题目数
+  missingImages?: string[] // JSON 题库缺失图片列表
+  detailId?: string // 导入后试卷详情 ID
 }
 
 export interface QuestionBankDetailQueryRequest {

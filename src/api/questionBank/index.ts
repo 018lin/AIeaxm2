@@ -82,7 +82,7 @@ export function getQuestionBankDetail(params: { detailId: string }) {
 // 自主上传-查看试题-试题列表
 export function getQuestionBankDetailList(params: QuestionBankDetailListRequest) {
   return requestPost<QuestionBankDetailListResponse, QuestionBankDetailListRequest>(
-    'api/v1/question-bank-detail/questions',
+    '/api/v1/question-bank-detail/questions',
     params
   )
 }

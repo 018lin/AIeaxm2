@@ -11,7 +11,7 @@
     <div class="upload-card">
       <div class="upload-header">
         <div class="title-cn">录入题目</div>
-        <div class="sub">请填写题目归属信息，并选择 PDF 文件或图片上传入库</div>
+        <div class="sub">请填写题目归属信息，并选择 PDF、图片或 JSON 题库文件上传入库</div>
       </div>
 
       <a-spin class="upload-form-spin" :spinning="loading" tip="上传中..." size="large" :delay="120">
@@ -61,6 +61,10 @@
                 <PictureOutlined />
                 图片
               </a-radio-button>
+              <a-radio-button value="json">
+                <FileTextOutlined />
+                JSON题库
+              </a-radio-button>
             </a-radio-group>
           </div>
 
@@ -106,7 +110,7 @@ import { selectEnum } from '@/enum/common'
 // 切片上传
 // import { uploadFileResumable } from '@/services/fragmentedUpload'
 import { dictGradeOneList, dictGradeThreeList, dictGradeTwoList, dictStageList } from '@/utils/dictList'
-import { FilePdfOutlined, PictureOutlined } from '@ant-design/icons-vue'
+import { FilePdfOutlined, FileTextOutlined, PictureOutlined } from '@ant-design/icons-vue'
 import { Icon } from '@iconify/vue'
 import type { UploadProps } from 'ant-design-vue'
 import { Upload, message } from 'ant-design-vue'
@@ -132,7 +136,7 @@ const emit = defineEmits<{
 }>()
 
 const loading = ref(false)
-type UploadMode = 'pdf' | 'image'
+type UploadMode = 'pdf' | 'image' | 'json'
 const uploadMode = ref<UploadMode>('pdf')
 const form = reactive<{
   stageId?: string
@@ -190,6 +194,12 @@ const uploadModeConfig: Record<UploadMode, { accept: string; allowed: Set<string
     allowed: new Set(['jpg', 'jpeg', 'png']),
     label: '图片',
     tip: '支持 jpg、jpeg、png 图片，可一次上传多张',
+  },
+  json: {
+    accept: '.json,.jpg,.jpeg,.png',
+    allowed: new Set(['json', 'jpg', 'jpeg', 'png']),
+    label: 'JSON题库',
+    tip: '请选择 1 个 JSON 文件，并同时选择 JSON 中引用的图片',
   },
 }
 
@@ -254,6 +264,82 @@ const fillHiddenDefaults = () => {
   form.volume = form.volume || volumeList.value[0]?.dictValue
 }
 
+const getFileExt = (file: File) => {
+  const name = String(file?.name || '')
+  return name.includes('.') ? name.split('.').pop()?.toLowerCase() || '' : ''
+}
+
+const getFileBaseName = (value: unknown) => {
+  return String(value || '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .pop()
+    ?.trim()
+    .toLowerCase()
+}
+
+const extractImageRefsFromHtml = (html: unknown) => {
+  const refs = new Set<string>()
+  const raw = String(html || '')
+  const imgReg = /<img\b[^>]*\bsrc=(["']?)([^"'\s>]+)\1/gi
+  let match: RegExpExecArray | null
+
+  while ((match = imgReg.exec(raw))) {
+    const src = getFileBaseName(match[2])
+    if (src && /\.(png|jpe?g)$/i.test(src)) refs.add(src)
+  }
+
+  return refs
+}
+
+const validateExamcooJsonFiles = async (files: File[]) => {
+  const jsonFiles = files.filter(file => getFileExt(file) === 'json')
+
+  if (jsonFiles.length !== 1) {
+    message.warning('JSON题库导入必须且只能选择 1 个 JSON 文件')
+    return false
+  }
+
+  let parsed: any
+  try {
+    parsed = JSON.parse(await jsonFiles[0].text())
+  } catch {
+    message.error('JSON 文件格式错误，请检查后重新选择')
+    return false
+  }
+
+  if (!Array.isArray(parsed?.questions)) {
+    message.error('JSON 文件缺少 questions 数组，无法导入题库')
+    return false
+  }
+
+  const requiredImages = new Set<string>()
+  parsed.questions.forEach((question: any) => {
+    if (Array.isArray(question?.images)) {
+      question.images.forEach((image: any) => {
+        const name = getFileBaseName(typeof image === 'string' ? image : image?.filename || image?.name || image?.src)
+        if (name && /\.(png|jpe?g)$/i.test(name)) requiredImages.add(name)
+      })
+    }
+
+    extractImageRefsFromHtml(question?.stem_html).forEach(name => requiredImages.add(name))
+  })
+
+  const uploadedImages = new Set(
+    files.filter(file => ['png', 'jpg', 'jpeg'].includes(getFileExt(file))).map(file => getFileBaseName(file.name))
+  )
+  const missingImages = [...requiredImages].filter(name => !uploadedImages.has(name))
+
+  if (missingImages.length) {
+    const preview = missingImages.slice(0, 5).join('、')
+    const suffix = missingImages.length > 5 ? ` 等 ${missingImages.length} 个文件` : ''
+    message.error(`缺少 JSON 引用的图片：${preview}${suffix}`)
+    return false
+  }
+
+  return true
+}
+
 // 选择文件：限制格式并拦截自动上传，仅保留当前选择的文件。
 const beforeUpload: UploadProps['beforeUpload'] = file => {
   const name = String((file as any)?.name || '')
@@ -313,6 +399,10 @@ const handleOk = async () => {
 
   const files = extractFiles(form.fileList)
   if (files.length === 0) return message.warning('请上传文件')
+  if (uploadMode.value === 'json') {
+    const valid = await validateExamcooJsonFiles(files)
+    if (!valid) return
+  }
 
   loading.value = true
   const submitSnapshot = { ...form }
@@ -349,6 +439,7 @@ const handleOk = async () => {
       questionBankTypeId: String(form.questionBankTypeId),
       textbookVersionId: String(form.textbookVersionId),
       volume: String(form.volume),
+      importFormat: uploadMode.value === 'json' ? 'examcoo_json' : undefined,
       files,
       /* 切片上传
       files: uploadedRefs as any, */

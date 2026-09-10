@@ -1,4 +1,4 @@
-import { constants, privateDecrypt, createHmac } from 'node:crypto'
+import { constants, privateDecrypt, createHmac, randomUUID } from 'node:crypto'
 import { hasDatabaseConfig, query, queryOne } from '../backend/db.mjs'
 
 const FALLBACK_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
@@ -130,6 +130,88 @@ async function readBody(req) {
     })
     if (!req.on) resolve({})
   })
+}
+
+async function readRawBody(req) {
+  if (Buffer.isBuffer(req.rawBody)) return req.rawBody
+  if (Buffer.isBuffer(req.body)) return req.body
+  if (typeof req.body === 'string') return Buffer.from(req.body)
+
+  return await new Promise(resolve => {
+    const chunks = []
+    req.on?.('data', chunk => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    })
+    req.on?.('end', () => resolve(Buffer.concat(chunks)))
+    if (!req.on) resolve(Buffer.alloc(0))
+  })
+}
+
+function parseContentDisposition(value = '') {
+  const result = {}
+  for (const part of String(value).split(';')) {
+    const [rawKey, ...rest] = part.trim().split('=')
+    if (!rawKey || !rest.length) continue
+    const key = rawKey.trim().toLowerCase()
+    result[key] = rest.join('=').trim().replace(/^"|"$/g, '')
+  }
+  return result
+}
+
+async function readMultipartForm(req) {
+  const contentType = String(req.headers?.['content-type'] || req.headers?.['Content-Type'] || '')
+  const boundary = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i)?.[1] || contentType.match(/boundary=([^;]+)/i)?.[1]
+  if (!boundary) return { fields: {}, files: [] }
+
+  const body = await readRawBody(req)
+  const delimiter = Buffer.from(`--${boundary}`)
+  const fields = {}
+  const files = []
+  let pos = body.indexOf(delimiter)
+
+  while (pos >= 0) {
+    pos += delimiter.length
+    if (body[pos] === 45 && body[pos + 1] === 45) break
+    if (body[pos] === 13 && body[pos + 1] === 10) pos += 2
+
+    const headerEnd = body.indexOf(Buffer.from('\r\n\r\n'), pos)
+    if (headerEnd < 0) break
+
+    const headerText = body.slice(pos, headerEnd).toString('latin1')
+    const headers = {}
+    for (const line of headerText.split(/\r\n/)) {
+      const sep = line.indexOf(':')
+      if (sep <= 0) continue
+      headers[line.slice(0, sep).trim().toLowerCase()] = line.slice(sep + 1).trim()
+    }
+
+    const next = body.indexOf(delimiter, headerEnd + 4)
+    if (next < 0) break
+    let contentEnd = next
+    if (body[contentEnd - 2] === 13 && body[contentEnd - 1] === 10) contentEnd -= 2
+    const content = body.slice(headerEnd + 4, contentEnd)
+    const disposition = parseContentDisposition(headers['content-disposition'])
+    const name = disposition.name || ''
+    const filename = disposition.filename || ''
+
+    if (name) {
+      if (filename) {
+        files.push({
+          fieldName: name,
+          fileName: filename,
+          mimeType: headers['content-type'] || 'application/octet-stream',
+          buffer: content,
+          size: content.length,
+        })
+      } else {
+        fields[name] = content.toString('utf8')
+      }
+    }
+
+    pos = next
+  }
+
+  return { fields, files }
 }
 
 function toDateTime(value) {
@@ -1522,7 +1604,7 @@ function mapQuestion(row) {
     id: row.id,
     questionId: String(row.questionId || row.id),
     questionContent: row.questionContent || row.content || row.title || '',
-    questionsAttachment: '',
+    questionsAttachment: row.questionsAttachment || '',
     answerAttachment: '',
     analysisAttachment: '',
     correctAnswer: row.correctAnswer || '',
@@ -1544,7 +1626,7 @@ function mapQuestion(row) {
     coordinates: { data: [] },
     knowledgePoints: [],
     chapters: [],
-    answers: row.correctAnswer ? [{ answer: row.correctAnswer }] : [],
+    answers: row.correctAnswer ? [{ area_id: 1, answer: row.correctAnswer }] : [],
     answered: row.correctAnswer ? 1 : 0,
     wrongAnswerCount: String(row.wrongAnswerCount || 0),
     wrongAnswerTime: '',
@@ -1552,38 +1634,296 @@ function mapQuestion(row) {
   }
 }
 
+let questionImportSchemaReady = false
+
+async function ensureQuestionImportSchema() {
+  if (questionImportSchemaReady) return
+  await query(`
+    CREATE TABLE IF NOT EXISTS homework_question_import_meta (
+      question_id BIGINT PRIMARY KEY,
+      batch_id VARCHAR(80) NOT NULL,
+      detail_id VARCHAR(120) NOT NULL,
+      exam_title VARCHAR(500) NOT NULL,
+      import_format VARCHAR(40) NOT NULL,
+      source_exam_id VARCHAR(80) NULL,
+      external_question_id VARCHAR(120) NULL,
+      original_no INT NULL,
+      section_title VARCHAR(500) NULL,
+      stem_html MEDIUMTEXT NULL,
+      answer_html MEDIUMTEXT NULL,
+      correct_answer TEXT NULL,
+      options_json MEDIUMTEXT NULL,
+      images_json MEDIUMTEXT NULL,
+      creator VARCHAR(64) DEFAULT '',
+      create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      deleted TINYINT(1) NOT NULL DEFAULT 0,
+      tenant_id BIGINT NOT NULL DEFAULT 1,
+      UNIQUE KEY uk_import_external (import_format, source_exam_id, external_question_id),
+      KEY idx_detail_id (detail_id),
+      KEY idx_batch_id (batch_id)
+    )
+  `)
+  questionImportSchemaReady = true
+}
+
+function escapeHtml(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function normalizeFileName(value = '') {
+  return String(value || '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .pop()
+    ?.trim()
+    .toLowerCase()
+}
+
+function fileExt(value = '') {
+  const name = normalizeFileName(value)
+  return name && name.includes('.') ? name.split('.').pop().toLowerCase() : ''
+}
+
+function mimeForExt(ext = '') {
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg'
+  if (ext === 'png') return 'image/png'
+  if (ext === 'json') return 'application/json'
+  return 'application/octet-stream'
+}
+
+function extractImageRefsFromHtml(html = '') {
+  const refs = new Set()
+  const imgReg = /<img\b[^>]*\bsrc=(["']?)([^"'\s>]+)\1/gi
+  let match
+  while ((match = imgReg.exec(String(html || '')))) {
+    const name = normalizeFileName(match[2])
+    if (name && /\.(png|jpe?g)$/i.test(name)) refs.add(name)
+  }
+  return refs
+}
+
+function imageRefsFromQuestion(question = {}) {
+  const refs = new Set()
+  if (Array.isArray(question.images)) {
+    for (const image of question.images) {
+      const name = normalizeFileName(typeof image === 'string' ? image : image?.filename || image?.name || image?.src)
+      if (name && /\.(png|jpe?g)$/i.test(name)) refs.add(name)
+    }
+  }
+  extractImageRefsFromHtml(question.stem_html).forEach(name => refs.add(name))
+  return refs
+}
+
+function replaceImageRefsWithDataUrls(html = '', fileMap = new Map()) {
+  return String(html || '').replace(/(<img\b[^>]*\bsrc=)(["']?)([^"'\s>]+)(\2)/gi, (all, prefix, quote, src, suffix) => {
+    const name = normalizeFileName(src)
+    const file = fileMap.get(name)
+    if (!file) return all
+    const ext = fileExt(file.fileName)
+    const dataUrl = `data:${file.mimeType || mimeForExt(ext)};base64,${file.buffer.toString('base64')}`
+    const q = quote || '"'
+    return `${prefix}${q}${dataUrl}${suffix || q}`
+  })
+}
+
+function examcooType(type = '') {
+  const map = {
+    single_choice: 'choice',
+    judge: 'judge',
+    fill_blank: 'blank',
+    text: 'answer',
+  }
+  return map[String(type || '').trim()] || 'answer'
+}
+
+function buildExamcooQuestionHtml(question = {}, imageMap = new Map()) {
+  const stem = question.stem_html
+    ? replaceImageRefsWithDataUrls(question.stem_html, imageMap)
+    : escapeHtml(question.stem || '').replace(/\r?\n/g, '<br>')
+  const options = Array.isArray(question.options) ? question.options : []
+  if (!options.length) return stem
+
+  const optionHtml = options
+    .map(option => {
+      const key = escapeHtml(option?.key || '')
+      const text = option?.html || escapeHtml(option?.text || '')
+      return `<li><strong>${key}.</strong> ${text}</li>`
+    })
+    .join('')
+  return `${stem}<ol class="examcoo-options">${optionHtml}</ol>`
+}
+
+function normalizeAnswer(question = {}) {
+  return String(question.answer_html || question.answer || '').trim()
+}
+
+function questionTitle(question = {}) {
+  const raw = String(question.stem || question.stem_html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  const prefix = question.no ? `第${question.no}题` : '导入题目'
+  return raw ? `${prefix}：${raw}`.slice(0, 500) : prefix
+}
+
+async function importExamcooQuestionBank(req) {
+  const user = await getCurrentUser(req)
+  if (!user) return fail('登录已过期', 401)
+
+  await ensureQuestionImportSchema()
+
+  const { fields, files } = await readMultipartForm(req)
+  if (fields.importFormat !== 'examcoo_json') {
+    return notImplemented('PDF/图片切题解析依赖真实业务后端；JSON题库导入请使用 importFormat=examcoo_json。')
+  }
+
+  const jsonFiles = files.filter(file => fileExt(file.fileName) === 'json')
+  if (jsonFiles.length !== 1) return fail('JSON题库导入必须且只能上传 1 个 JSON 文件', 400)
+
+  let payload
+  try {
+    payload = JSON.parse(jsonFiles[0].buffer.toString('utf8'))
+  } catch {
+    return fail('JSON 文件格式错误，请检查后重新上传', 400)
+  }
+
+  if (!Array.isArray(payload?.questions)) return fail('JSON 文件缺少 questions 数组，无法导入题库', 400)
+
+  const imageMap = new Map(
+    files
+      .filter(file => ['png', 'jpg', 'jpeg'].includes(fileExt(file.fileName)))
+      .map(file => [normalizeFileName(file.fileName), file])
+  )
+  const requiredImages = new Set()
+  for (const question of payload.questions) imageRefsFromQuestion(question).forEach(name => requiredImages.add(name))
+  const missingImages = [...requiredImages].filter(name => !imageMap.has(name))
+  if (missingImages.length) return fail(`缺少 JSON 引用的图片：${missingImages.slice(0, 10).join('、')}`, 400)
+
+  const batchId = `examcoo-${payload.exam_id || Date.now()}-${randomUUID().slice(0, 8)}`
+  const detailId = `examcoo-${payload.exam_id || batchId}`
+  const examTitle = String(payload.title || jsonFiles[0].fileName.replace(/\.json$/i, '') || 'JSON题库').slice(0, 500)
+  const creator = String(user.id || '')
+  const tenantId = Number(user.tenant_id || process.env.APP_TENANT_ID || 1)
+  let importedQuestionCount = 0
+  let skippedQuestionCount = 0
+
+  for (const question of payload.questions) {
+    const externalQuestionId = String(question.id || `${payload.exam_id || batchId}-${question.no || importedQuestionCount + 1}`)
+    const content = buildExamcooQuestionHtml(question, imageMap)
+    const answer = normalizeAnswer(question)
+    const insertResult = await query(
+      `INSERT INTO homework_questions
+        (title, content, type, difficulty, subject, grade, score, estimated_time, status, usage_count, correct_rate, creator, updater, deleted, tenant_id)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0, ?, ?, 0, ?
+       WHERE NOT EXISTS (
+         SELECT 1 FROM homework_question_import_meta
+         WHERE import_format = 'examcoo_json' AND source_exam_id = ? AND external_question_id = ? AND deleted = 0
+       )`,
+      [
+        questionTitle(question),
+        content,
+        examcooType(question.type),
+        String(fields.difficulty || 'medium'),
+        String(fields.subjectId || ''),
+        String(fields.gradeId || ''),
+        Math.round(Number(question.score || 5)),
+        Number(fields.estimatedTime || 5),
+        creator,
+        creator,
+        tenantId,
+        String(payload.exam_id || ''),
+        externalQuestionId,
+      ]
+    )
+
+    const questionId = Number(insertResult?.insertId || 0)
+    if (!questionId) {
+      skippedQuestionCount += 1
+      continue
+    }
+
+    await query(
+      `INSERT INTO homework_question_import_meta
+        (question_id, batch_id, detail_id, exam_title, import_format, source_exam_id, external_question_id, original_no,
+         section_title, stem_html, answer_html, correct_answer, options_json, images_json, creator, tenant_id)
+       VALUES (?, ?, ?, ?, 'examcoo_json', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        questionId,
+        batchId,
+        detailId,
+        examTitle,
+        String(payload.exam_id || ''),
+        externalQuestionId,
+        Number(question.no || 0) || null,
+        String(question.section || ''),
+        content,
+        String(question.answer_html || ''),
+        answer,
+        JSON.stringify(Array.isArray(question.options) ? question.options : []),
+        JSON.stringify([...imageRefsFromQuestion(question)]),
+        creator,
+        tenantId,
+      ]
+    )
+    importedQuestionCount += 1
+  }
+
+  return ok({
+    successCount: importedQuestionCount ? 1 : 0,
+    failedCount: importedQuestionCount ? 0 : 1,
+    totalCount: 1,
+    successFiles: importedQuestionCount
+      ? [{ fileName: jsonFiles[0].fileName, fileType: 'json', mimeType: jsonFiles[0].mimeType, fileSize: jsonFiles[0].size }]
+      : [],
+    failedFiles: importedQuestionCount ? [] : [{ fileName: jsonFiles[0].fileName, error: '没有导入新题目', fileSize: jsonFiles[0].size }],
+    batchId,
+    detailId,
+    directoryPath: '',
+    importedQuestionCount,
+    skippedQuestionCount,
+    missingImages,
+  })
+}
+
 async function questionPage(req) {
   try {
+    await ensureQuestionImportSchema()
     const body = await readBody(req)
     const { pageNo, pageSize, offset } = pageInput(body)
-    const clauses = ["deleted = b'0'"]
+    const clauses = ["q.deleted = b'0'"]
     const values = []
-    pushEquals(clauses, values, 'grade', body.gradeId)
-    pushEquals(clauses, values, 'subject', body.subjectId)
-    pushEquals(clauses, values, 'difficulty', body.difficulty)
-    pushEquals(clauses, values, 'type', body.questionType)
+    pushEquals(clauses, values, 'q.grade', body.gradeId)
+    pushEquals(clauses, values, 'q.subject', body.subjectId)
+    pushEquals(clauses, values, 'q.difficulty', body.difficulty)
+    pushEquals(clauses, values, 'q.type', body.questionType)
     const where = clauses.join(' AND ')
     const [totalRow, rows] = await Promise.all([
-      queryOne(`SELECT COUNT(*) AS n FROM homework_questions WHERE ${where}`, values),
+      queryOne(`SELECT COUNT(*) AS n FROM homework_questions q WHERE ${where}`, values),
       query(
         `SELECT
-          id,
-          id AS questionId,
-          title,
-          content,
-          type AS questionType,
-          difficulty,
-          subject AS subjectId,
-          subject AS subjectName,
-          grade AS gradeId,
-          grade AS gradeName,
-          score,
-          status,
-          creator,
-          create_time AS createTime
-         FROM homework_questions
+          q.id,
+          q.id AS questionId,
+          q.title,
+          COALESCE(m.stem_html, q.content) AS questionContent,
+          q.type AS questionType,
+          q.difficulty,
+          q.subject AS subjectId,
+          q.subject AS subjectName,
+          q.grade AS gradeId,
+          q.grade AS gradeName,
+          q.score,
+          q.status,
+          q.creator,
+          q.create_time AS createTime,
+          m.correct_answer AS correctAnswer,
+          '' AS answerAnalysis
+         FROM homework_questions q
+         LEFT JOIN homework_question_import_meta m ON m.question_id = q.id AND m.deleted = 0
          WHERE ${where}
-         ORDER BY id DESC
+         ORDER BY q.id DESC
          LIMIT ?, ?`,
         [...values, offset, pageSize]
       ),
@@ -1596,26 +1936,30 @@ async function questionPage(req) {
 
 async function questionDetail(req) {
   try {
+    await ensureQuestionImportSchema()
     const path = new URL(req.url || '/', 'http://localhost').pathname.replace(/^\/app(?=\/)/, '')
     const id = decodeURIComponent(path.split('/').pop() || '')
     const row = await queryOne(
       `SELECT
-        id,
-        id AS questionId,
-        title,
-        content,
-        type AS questionType,
-        difficulty,
-        subject AS subjectId,
-        subject AS subjectName,
-        grade AS gradeId,
-        grade AS gradeName,
-        score,
-        status,
-        creator,
-        create_time AS createTime
-       FROM homework_questions
-       WHERE deleted = b'0' AND id = ?
+        q.id,
+        q.id AS questionId,
+        q.title,
+        COALESCE(m.stem_html, q.content) AS questionContent,
+        q.type AS questionType,
+        q.difficulty,
+        q.subject AS subjectId,
+        q.subject AS subjectName,
+        q.grade AS gradeId,
+        q.grade AS gradeName,
+        q.score,
+        q.status,
+        q.creator,
+        q.create_time AS createTime,
+        m.correct_answer AS correctAnswer,
+        '' AS answerAnalysis
+       FROM homework_questions q
+       LEFT JOIN homework_question_import_meta m ON m.question_id = q.id AND m.deleted = 0
+       WHERE q.deleted = b'0' AND q.id = ?
        LIMIT 1`,
       [id]
     )
@@ -1627,27 +1971,71 @@ async function questionDetail(req) {
 
 async function questionBankDetailPage(req) {
   try {
+    await ensureQuestionImportSchema()
     const body = await readBody(req)
     const { pageNo, pageSize, offset } = pageInput(body)
+    const clauses = ["q.deleted = b'0'"]
+    const values = []
+    pushEquals(clauses, values, 'q.grade', body.gradeId)
+    pushEquals(clauses, values, 'q.subject', body.subjectId)
+    const where = clauses.join(' AND ')
     const [totalRow, rows] = await Promise.all([
-      queryOne("SELECT COUNT(DISTINCT subject, grade) AS n FROM homework_questions WHERE deleted = b'0'"),
+      queryOne(
+        `SELECT COUNT(*) AS n
+         FROM (
+           SELECT m.detail_id
+           FROM homework_question_import_meta m
+           JOIN homework_questions q ON q.id = m.question_id
+           WHERE ${where} AND m.deleted = 0
+           GROUP BY m.detail_id
+           UNION ALL
+           SELECT CONCAT('local-', q.subject, '-', q.grade) AS detail_id
+           FROM homework_questions q
+           LEFT JOIN homework_question_import_meta m ON m.question_id = q.id AND m.deleted = 0
+           WHERE ${where} AND m.question_id IS NULL
+           GROUP BY q.subject, q.grade
+         ) x`,
+        [...values, ...values]
+      ),
       query(
         `SELECT
-          MIN(id) AS id,
-          CONCAT('local-', subject, '-', grade) AS detailId,
-          CONCAT(grade, subject, '题库') AS examTitle,
-          subject AS subjectId,
-          subject AS subjectName,
-          grade AS gradeId,
-          grade AS gradeName,
-          MIN(create_time) AS createTime,
+          MIN(q.id) AS id,
+          m.detail_id AS detailId,
+          m.batch_id AS batchId,
+          m.exam_title AS examTitle,
+          q.subject AS subjectId,
+          q.subject AS subjectName,
+          q.grade AS gradeId,
+          q.grade AS gradeName,
+          MIN(q.create_time) AS createTime,
+          MAX(q.update_time) AS updateTime,
+          m.creator AS creator,
           COUNT(*) AS questionCount
-         FROM homework_questions
-         WHERE deleted = b'0'
-         GROUP BY subject, grade
-         ORDER BY MIN(id) DESC
+         FROM homework_question_import_meta m
+         JOIN homework_questions q ON q.id = m.question_id
+         WHERE ${where} AND m.deleted = 0
+         GROUP BY m.detail_id, m.batch_id, m.exam_title, q.subject, q.grade, m.creator
+         UNION ALL
+         SELECT
+          MIN(q.id) AS id,
+          CONCAT('local-', q.subject, '-', q.grade) AS detailId,
+          CONCAT('local-', q.subject, '-', q.grade) AS batchId,
+          CONCAT(q.grade, q.subject, '题库') AS examTitle,
+          q.subject AS subjectId,
+          q.subject AS subjectName,
+          q.grade AS gradeId,
+          q.grade AS gradeName,
+          MIN(q.create_time) AS createTime,
+          MAX(q.update_time) AS updateTime,
+          MIN(q.creator) AS creator,
+          COUNT(*) AS questionCount
+         FROM homework_questions q
+         LEFT JOIN homework_question_import_meta m ON m.question_id = q.id AND m.deleted = 0
+         WHERE ${where} AND m.question_id IS NULL
+         GROUP BY q.subject, q.grade
+         ORDER BY updateTime DESC, id DESC
          LIMIT ?, ?`,
-        [offset, pageSize]
+        [...values, ...values, offset, pageSize]
       ),
     ])
     const total = Number(totalRow?.n || 0)
@@ -1655,7 +2043,7 @@ async function questionBankDetailPage(req) {
       list: rows.map(row => ({
         id: row.id,
         detailId: row.detailId,
-        batchId: row.detailId,
+        batchId: row.batchId,
         examTitle: row.examTitle,
         gradeId: row.gradeId,
         gradeName: row.gradeName,
@@ -1665,12 +2053,13 @@ async function questionBankDetailPage(req) {
         stageName: '',
         termId: '',
         termName: '',
-        itemType: 'local',
-        itemTypeName: '本地题库',
-        typeName: '本地题库',
+        itemType: String(row.detailId || '').startsWith('local-') ? 'local' : 'examcoo_json',
+        itemTypeName: String(row.detailId || '').startsWith('local-') ? '本地题库' : 'JSON题库',
+        typeName: String(row.detailId || '').startsWith('local-') ? '本地题库' : 'JSON题库',
         auditStatus: 'AUDIT_PASS',
-        creatorName: '本地数据',
+        creatorName: row.creator || '导入数据',
         createTime: toDateTime(row.createTime),
+        updateTime: toDateTime(row.updateTime || row.createTime),
       })),
       total,
       totalPage: Math.ceil(total / pageSize),
@@ -1682,39 +2071,82 @@ async function questionBankDetailPage(req) {
 
 async function questionBankDetailByPath(req) {
   try {
+    await ensureQuestionImportSchema()
     const path = new URL(req.url || '/', 'http://localhost').pathname.replace(/^\/app(?=\/)/, '')
     const detailId = decodeURIComponent(path.split('/').pop() || '')
     const row = await queryOne(
       `SELECT
-        MIN(id) AS id,
-        CONCAT('local-', subject, '-', grade) AS detailId,
-        CONCAT(grade, subject, '题库') AS examTitle,
-        subject AS subjectId,
-        subject AS subjectName,
-        grade AS gradeId,
-        grade AS gradeName,
-        MIN(create_time) AS createTime
-       FROM homework_questions
-       WHERE deleted = b'0'
-       GROUP BY subject, grade
-       HAVING detailId = ?
+        MIN(q.id) AS id,
+        m.detail_id AS detailId,
+        m.batch_id AS batchId,
+        m.exam_title AS examTitle,
+        q.subject AS subjectId,
+        q.subject AS subjectName,
+        q.grade AS gradeId,
+        q.grade AS gradeName,
+        MIN(q.create_time) AS createTime,
+        MAX(q.update_time) AS updateTime
+       FROM homework_question_import_meta m
+       JOIN homework_questions q ON q.id = m.question_id
+       WHERE q.deleted = b'0' AND m.deleted = 0 AND m.detail_id = ?
+       GROUP BY m.detail_id, m.batch_id, m.exam_title, q.subject, q.grade
        LIMIT 1`,
       [detailId]
     )
+    if (!row && detailId.startsWith('local-')) {
+      const localRow = await queryOne(
+        `SELECT
+          MIN(q.id) AS id,
+          CONCAT('local-', q.subject, '-', q.grade) AS detailId,
+          CONCAT('local-', q.subject, '-', q.grade) AS batchId,
+          CONCAT(q.grade, q.subject, '题库') AS examTitle,
+          q.subject AS subjectId,
+          q.subject AS subjectName,
+          q.grade AS gradeId,
+          q.grade AS gradeName,
+          MIN(q.create_time) AS createTime,
+          MAX(q.update_time) AS updateTime
+         FROM homework_questions q
+         LEFT JOIN homework_question_import_meta m ON m.question_id = q.id AND m.deleted = 0
+         WHERE q.deleted = b'0' AND m.question_id IS NULL
+         GROUP BY q.subject, q.grade
+         HAVING detailId = ?
+         LIMIT 1`,
+        [detailId]
+      )
+      if (localRow) {
+        return ok({
+          id: localRow.id,
+          detailId: localRow.detailId,
+          batchId: localRow.batchId,
+          examTitle: localRow.examTitle,
+          gradeId: localRow.gradeId,
+          gradeName: localRow.gradeName,
+          subjectId: localRow.subjectId,
+          subjectName: localRow.subjectName,
+          itemType: 'local',
+          itemTypeName: '本地题库',
+          auditStatus: 'AUDIT_PASS',
+          createTime: toDateTime(localRow.createTime),
+          updateTime: toDateTime(localRow.updateTime || localRow.createTime),
+        })
+      }
+    }
     if (!row) return fail('试卷详情不存在', 404)
     return ok({
       id: row.id,
       detailId: row.detailId,
-      batchId: row.detailId,
+      batchId: row.batchId,
       examTitle: row.examTitle,
       gradeId: row.gradeId,
       gradeName: row.gradeName,
       subjectId: row.subjectId,
       subjectName: row.subjectName,
-      itemType: 'local',
-      itemTypeName: '本地题库',
+      itemType: 'examcoo_json',
+      itemTypeName: 'JSON题库',
       auditStatus: 'AUDIT_PASS',
       createTime: toDateTime(row.createTime),
+      updateTime: toDateTime(row.updateTime || row.createTime),
     })
   } catch (error) {
     return dbError(error)
@@ -1723,15 +2155,27 @@ async function questionBankDetailByPath(req) {
 
 async function questionBankViewQuestion(req) {
   try {
+    await ensureQuestionImportSchema()
     const path = new URL(req.url || '/', 'http://localhost').pathname.replace(/^\/app(?=\/)/, '')
     const detailId = decodeURIComponent(path.split('/').pop() || '')
-    const rows = await query(
-      `SELECT id, id AS questionId
-       FROM homework_questions
-       WHERE deleted = b'0' AND CONCAT('local-', subject, '-', grade) = ?
-       ORDER BY id ASC`,
-      [detailId]
-    )
+    const isLocal = detailId.startsWith('local-')
+    const rows = isLocal
+      ? await query(
+          `SELECT q.id, q.id AS questionId
+           FROM homework_questions q
+           LEFT JOIN homework_question_import_meta m ON m.question_id = q.id AND m.deleted = 0
+           WHERE q.deleted = b'0' AND m.question_id IS NULL AND CONCAT('local-', q.subject, '-', q.grade) = ?
+           ORDER BY q.id ASC`,
+          [detailId]
+        )
+      : await query(
+          `SELECT q.id, q.id AS questionId
+           FROM homework_questions q
+           JOIN homework_question_import_meta m ON m.question_id = q.id
+           WHERE q.deleted = b'0' AND m.deleted = 0 AND m.detail_id = ?
+           ORDER BY COALESCE(m.original_no, q.id), q.id ASC`,
+          [detailId]
+        )
     return ok({
       questionList: rows.map(row => ({
         questionId: String(row.questionId),
@@ -1739,6 +2183,103 @@ async function questionBankViewQuestion(req) {
         status: 1,
         tags: [],
       })),
+    })
+  } catch (error) {
+    return dbError(error)
+  }
+}
+
+async function questionBankDetailQuestions(req) {
+  try {
+    await ensureQuestionImportSchema()
+    const body = await readBody(req)
+    const { pageNo, pageSize, offset } = pageInput(body)
+    const detailId = String(body.detailId || '').trim()
+    if (!detailId) return fail('缺少试卷详情ID', 400)
+    const isLocal = detailId.startsWith('local-')
+
+    if (isLocal) {
+      const [totalRow, rows] = await Promise.all([
+        queryOne(
+          `SELECT COUNT(*) AS n
+           FROM homework_questions q
+           LEFT JOIN homework_question_import_meta m ON m.question_id = q.id AND m.deleted = 0
+           WHERE q.deleted = b'0' AND m.question_id IS NULL AND CONCAT('local-', q.subject, '-', q.grade) = ?`,
+          [detailId]
+        ),
+        query(
+          `SELECT
+            q.id,
+            q.id AS questionId,
+            q.title,
+            q.content AS questionContent,
+            q.type AS questionType,
+            q.difficulty,
+            q.subject AS subjectId,
+            q.subject AS subjectName,
+            q.grade AS gradeId,
+            q.grade AS gradeName,
+            q.score,
+            q.status,
+            q.creator,
+            q.create_time AS createTime,
+            '' AS correctAnswer,
+            '' AS answerAnalysis
+           FROM homework_questions q
+           LEFT JOIN homework_question_import_meta m ON m.question_id = q.id AND m.deleted = 0
+           WHERE q.deleted = b'0' AND m.question_id IS NULL AND CONCAT('local-', q.subject, '-', q.grade) = ?
+           ORDER BY q.id ASC
+           LIMIT ?, ?`,
+          [detailId, offset, pageSize]
+        ),
+      ])
+
+      return ok({
+        list: rows.map(mapQuestion),
+        total: Number(totalRow?.n || 0),
+        totalPage: Math.ceil(Number(totalRow?.n || 0) / pageSize),
+      })
+    }
+
+    const [totalRow, rows] = await Promise.all([
+      queryOne(
+        `SELECT COUNT(*) AS n
+         FROM homework_questions q
+         JOIN homework_question_import_meta m ON m.question_id = q.id
+         WHERE q.deleted = b'0' AND m.deleted = 0 AND m.detail_id = ?`,
+        [detailId]
+      ),
+      query(
+        `SELECT
+          q.id,
+          q.id AS questionId,
+          q.title,
+          COALESCE(m.stem_html, q.content) AS questionContent,
+          q.type AS questionType,
+          q.difficulty,
+          q.subject AS subjectId,
+          q.subject AS subjectName,
+          q.grade AS gradeId,
+          q.grade AS gradeName,
+          q.score,
+          q.status,
+          q.creator,
+          q.create_time AS createTime,
+          m.correct_answer AS correctAnswer,
+          '' AS answerAnalysis
+         FROM homework_questions q
+         JOIN homework_question_import_meta m ON m.question_id = q.id
+         WHERE q.deleted = b'0' AND m.deleted = 0 AND m.detail_id = ?
+         ORDER BY COALESCE(m.original_no, q.id), q.id ASC
+         LIMIT ?, ?`,
+        [detailId, offset, pageSize]
+      ),
+    ])
+
+    return ok({
+      list: rows.map(mapQuestion),
+      total: Number(totalRow?.n || 0),
+      totalPage: Math.ceil(Number(totalRow?.n || 0) / pageSize),
     })
   } catch (error) {
     return dbError(error)
@@ -1978,7 +2519,8 @@ async function proxyRequest(req, originalPath) {
 
   let body
   if (method !== 'GET' && method !== 'HEAD') {
-    body = req.rawBody && req.rawBody.length ? req.rawBody : JSON.stringify(await readBody(req))
+    body = await readRawBody(req)
+    if (!body.length) body = JSON.stringify(await readBody(req))
     if (!headers['content-type'] && !headers['Content-Type']) headers['content-type'] = 'application/json'
   }
   if (body == null) {
@@ -2067,8 +2609,10 @@ export async function executeApi(req, endpoint) {
   if (endpoint === 'question-detail' && method === 'GET') return questionDetail(req)
   if (endpoint === 'question-bank-detail-page' && method === 'POST') return questionBankDetailPage(req)
   if (endpoint === 'question-bank-detail' && method === 'GET') return questionBankDetailByPath(req)
+  if (endpoint === 'question-bank-detail-questions' && method === 'POST') return questionBankDetailQuestions(req)
   if (endpoint === 'question-bank-view-question' && method === 'GET') return questionBankViewQuestion(req)
   if (endpoint === 'question-bank-view-attach' && method === 'GET') return ok('')
+  if (endpoint === 'question-bank-import' && method === 'POST') return importExamcooQuestionBank(req)
   if (endpoint === 'tag-list' && method === 'POST') return emptyList()
   if (endpoint === 'knowledge-tree' && method === 'POST') return emptyList()
   if (endpoint === 'chapter-list' && method === 'POST') return emptyList()
@@ -2108,7 +2652,6 @@ export async function executeApi(req, endpoint) {
       'question-delete',
       'question-edit',
       'question-ai-answer',
-      'question-bank-import',
       'question-bank-update-title',
       'question-bank-delete',
       'file-upload',
@@ -2253,6 +2796,7 @@ export async function executeByPath(req) {
     '/api/v1/assignment-qrcode/list': 'assignment-qrcode-list',
     '/api/v1/composition/page': 'composition-page',
     '/api/v1/question-bank-detail/page': 'question-bank-detail-page',
+    '/api/v1/question-bank-detail/questions': 'question-bank-detail-questions',
     '/api/v1/question-bank-detail/update-title': 'question-bank-update-title',
     '/api/v1/question-bank-batch/import': 'question-bank-import',
     '/api/v1/tag/list': 'tag-list',

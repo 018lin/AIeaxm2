@@ -1,5 +1,11 @@
 import { executeByPath, sendJson } from './_app-api.js'
 
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+}
+
 // 单个 catch-all Serverless Function 处理全部 /api/* 请求
 // （Vercel Hobby 计划最多 12 个函数，因此合并为 1 个）
 export default async function handler(req, res) {
