@@ -1907,7 +1907,11 @@ async function groupingStrategyPage() {
 
 async function proxyRequest(req, originalPath) {
   const originalUrl = new URL(req.url || '/', 'http://localhost')
-  const target = new URL(`${originalPath}${originalUrl.search}`, proxyTarget)
+  const target = new URL(proxyTarget)
+  const basePath = target.pathname.replace(/\/+$/, '')
+  const requestPath = String(originalPath || '').replace(/^\/+/, '')
+  target.pathname = `${basePath}/${requestPath}`.replace(/\/{2,}/g, '/')
+  target.search = originalUrl.search
   const method = String(req.method || 'GET').toUpperCase()
   const headers = { ...req.headers }
   delete headers.host
