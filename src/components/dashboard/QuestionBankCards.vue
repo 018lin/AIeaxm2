@@ -25,6 +25,7 @@ import { computed, onMounted, ref } from 'vue'
 
 const parsedUserInfo = getUserBaseInfo()
 const subjectName = String(parsedUserInfo?.subjectName || '').trim()
+const EMPTY_TEXT = '暂无'
 
 const stats = ref<QuestionCountVO | null>(null)
 
@@ -33,7 +34,10 @@ const asNum = (v: any) => {
   const n = Number(v)
   return Number.isFinite(n) ? n : 0
 }
-const asFmt = (v: any) => nf.format(asNum(v))
+const asDisplay = (v: any) => {
+  const n = asNum(v)
+  return n > 0 ? nf.format(n) : EMPTY_TEXT
+}
 
 const cards = computed(() => {
   const s = stats.value
@@ -41,27 +45,27 @@ const cards = computed(() => {
     {
       key: 'total',
       title: '总试题',
-      value: s ? asFmt(s.totalQuestionCount) : '--',
+      value: s ? asDisplay(s.totalQuestionCount) : EMPTY_TEXT,
       subLabel: '近7日',
-      subValue: s ? asNum(s.newQuestionCount) : 0,
+      subValue: s ? asDisplay(s.newQuestionCount) : EMPTY_TEXT,
       tone: 'blue',
       icon: 'solar:clipboard-text-bold-duotone',
     },
     {
       key: 'subject',
       title: `${subjectName || '学科'}试题`,
-      value: s ? asFmt(s.subjectQuestionCount) : '--',
+      value: s ? asDisplay(s.subjectQuestionCount) : EMPTY_TEXT,
       subLabel: '近7日',
-      subValue: s ? asNum(s.newSubjectQuestionCount) : 0,
+      subValue: s ? asDisplay(s.newSubjectQuestionCount) : EMPTY_TEXT,
       tone: 'purple',
       icon: 'solar:book-2-bold-duotone',
     },
     {
       key: 'upload',
       title: '上传试题',
-      value: s ? asFmt(s.selfQuestionCount) : '--',
+      value: s ? asDisplay(s.selfQuestionCount) : EMPTY_TEXT,
       subLabel: '近7日',
-      subValue: s ? asNum(s.newSelfQuestionCount) : 0,
+      subValue: s ? asDisplay(s.newSelfQuestionCount) : EMPTY_TEXT,
       tone: 'green',
       icon: 'solar:cloud-upload-bold-duotone',
     },

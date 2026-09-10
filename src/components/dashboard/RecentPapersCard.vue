@@ -19,7 +19,7 @@
         <a-spin />
       </div>
 
-      <a-empty v-else-if="list.length === 0" description="暂无组卷记录" />
+      <a-empty v-else-if="list.length === 0" description="暂无" />
 
       <div v-else class="paper-list">
         <div v-for="item in list" :key="item.assignmentId" class="paper-item">

@@ -19,7 +19,7 @@
         <div class="left">
           <div class="label">{{ k.label }}</div>
           <div class="val">
-            {{ k.value }}<span v-if="k.unit" class="unit">{{ k.unit }}</span>
+            {{ k.value }}<span v-if="k.unit && k.value !== EMPTY_TEXT" class="unit">{{ k.unit }}</span>
           </div>
         </div>
         <div class="icon" :class="'is-' + k.tone">
@@ -72,6 +72,7 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 const parsedUserInfo = getUserBaseInfo()
 const teacherDisplayName = ref(parsedUserInfo?.teacherName || '')
+const EMPTY_TEXT = '暂无'
 
 type Tone = 'blue' | 'green' | 'purple' | 'orange'
 
@@ -84,18 +85,26 @@ type TopKpi = {
   tone: Tone
 }
 
+const displayCount = (value?: string | number | null) => {
+  const raw = String(value ?? '').trim()
+  if (!raw) return EMPTY_TEXT
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n <= 0) return EMPTY_TEXT
+  return raw
+}
+
 const topKpis = computed<TopKpi[]>(() => [
   {
     key: 'classes',
     label: '授课班级数',
-    value: overviewData.value.classCount || 0,
+    value: displayCount(overviewData.value?.classCount),
     icon: 'solar:users-group-rounded-bold-duotone',
     tone: 'blue',
   },
   {
     key: 'students',
     label: '学生总数',
-    value: overviewData.value.studentCount || 0,
+    value: displayCount(overviewData.value?.studentCount),
     unit: '人',
     icon: 'solar:user-rounded-bold-duotone',
     tone: 'green',
@@ -103,7 +112,7 @@ const topKpis = computed<TopKpi[]>(() => [
   {
     key: 'monthly',
     label: '本月作业',
-    value: overviewData.value.workCount || 0,
+    value: displayCount(overviewData.value?.workCount),
     unit: '份',
     icon: 'solar:pen-new-square-bold-duotone',
     tone: 'purple',
@@ -111,19 +120,14 @@ const topKpis = computed<TopKpi[]>(() => [
   {
     key: 'avg',
     label: '平均答题率',
-    value: overviewData.value.accuracy || 0,
+    value: displayCount(overviewData.value?.accuracy),
     unit: '%',
     icon: 'solar:chart-2-bold-duotone',
     tone: 'orange',
   },
 ])
 
-const overviewData = ref<TeacherOverviewVO>({
-  classCount: '0',
-  studentCount: '0',
-  workCount: '0',
-  accuracy: '0',
-})
+const overviewData = ref<TeacherOverviewVO | null>(null)
 
 type ClassTab = { classId: string; className: string }
 type DistItem = { count: number; rate: number }

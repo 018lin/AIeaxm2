@@ -126,6 +126,12 @@ VITE_USE_MOCK=false
 APP_API_PROXY_TARGET=https://your-business-api-host
 ```
 
+直连 MySQL 调试时，`backend/dev-seed.sql` 里的演示班级、作业、题目默认不会计入教师首页统计。如需临时查看这些种子记录，可设置：
+
+```env
+APP_HIDE_DEV_SEED_DATA=false
+```
+
 本地开发时 `VITE_API_BASE` 指向本项目 API 服务；线上部署时建议留空走同域 `/api/...`。
 
 ## 快速开始

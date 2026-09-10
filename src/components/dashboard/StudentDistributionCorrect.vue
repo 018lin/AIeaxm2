@@ -22,7 +22,11 @@
       说明：人数为学生数，占比=该分组人数/总人数；上方气泡=高于平均值+处于平均线，下方气泡=低于平均值。
     </div>
 
-    <div class="sd-body">
+    <div v-if="!hasDistributionData" class="sd-empty">
+      <a-empty description="暂无" />
+    </div>
+
+    <div v-else class="sd-body">
       <div ref="chartRef" class="sd-chart"></div>
 
       <div class="sd-list">
@@ -164,6 +168,10 @@ const normalizeDistribution = (input: DistInput): Distribution => {
 }
 
 const accuracyDist = computed<Distribution>(() => normalizeDistribution(props.accuracy))
+const hasDistributionData = computed(() => {
+  const d = accuracyDist.value
+  return [d.above.count, d.equal.count, d.below.count].some(value => Number(value || 0) > 0)
+})
 
 type LevelKey = 'above' | 'equal' | 'below'
 
@@ -322,6 +330,11 @@ const buildOption = () => {
 
 const render = async () => {
   await nextTick()
+  if (!hasDistributionData.value) {
+    chart?.dispose()
+    chart = null
+    return
+  }
   if (!chartRef.value) return
   chart ??= echarts.init(chartRef.value)
   chart.setOption(buildOption(), true)
@@ -332,7 +345,7 @@ const onResize = () => {
 }
 
 watch(
-  () => [props.accuracy, activeLevel.value],
+  () => [props.accuracy, activeLevel.value, hasDistributionData.value],
   () => render(),
   { deep: true, flush: 'post' }
 )
@@ -400,6 +413,13 @@ onUnmounted(() => {
   grid-template-columns: minmax(0, 1fr) 260px;
   gap: 18px;
   align-items: center;
+}
+
+.sd-empty {
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sd-chart {

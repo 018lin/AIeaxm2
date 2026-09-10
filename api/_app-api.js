@@ -166,6 +166,47 @@ function daysAgoStart(days) {
   return d
 }
 
+function envFlag(name) {
+  const value = process.env[name]
+  if (value == null || value === '') return null
+  return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase())
+}
+
+function shouldHideDevSeedData() {
+  return envFlag('APP_HIDE_DEV_SEED_DATA') ?? true
+}
+
+function devSeedClassFilter(alias = 'c') {
+  if (!shouldHideDevSeedData()) return '1 = 1'
+  return `NOT (
+    ${alias}.id IN (1, 2)
+    AND ${alias}.teacher_id = 1
+    AND ${alias}.name IN ('三年级一班', '三年级二班')
+    AND ${alias}.grade = '三年级'
+    AND ${alias}.creator = '1'
+  )`
+}
+
+function devSeedAssignmentFilter(alias = 'a') {
+  if (!shouldHideDevSeedData()) return '1 = 1'
+  return `NOT (
+    ${alias}.id IN (1, 2)
+    AND ${alias}.creator = '1'
+    AND ${alias}.title IN ('三年级数学周练', '语文阅读专项练习')
+    AND ${alias}.grade = '三年级'
+  )`
+}
+
+function devSeedQuestionFilter(alias = 'q') {
+  if (!shouldHideDevSeedData()) return '1 = 1'
+  return `NOT (
+    ${alias}.id IN (1, 2, 3)
+    AND ${alias}.creator = '1'
+    AND ${alias}.title IN ('两位数加法', '长方形周长', '阅读理解中心句')
+    AND ${alias}.grade = '三年级'
+  )`
+}
+
 function getAuthSql() {
   return (
     process.env.APP_AUTH_USER_SQL ||
@@ -697,20 +738,28 @@ async function teacherOverview(req) {
     if (!user) return fail('登录已过期', 401)
 
     const [classes, assignments, students, accuracy] = await Promise.all([
-      queryOne("SELECT COUNT(*) AS n FROM homework_classes WHERE teacher_id = ? AND deleted = b'0'", [user.id]),
-      queryOne("SELECT COUNT(*) AS n FROM homework_assignments WHERE creator = ? AND deleted = b'0' AND create_time >= ?", [
-        String(user.id),
-        monthStart(),
-      ]),
-      queryOne("SELECT COALESCE(SUM(member_count), 0) AS n FROM homework_classes WHERE teacher_id = ? AND deleted = b'0'", [
-        user.id,
-      ]),
+      queryOne(
+        `SELECT COUNT(*) AS n FROM homework_classes c WHERE c.teacher_id = ? AND c.deleted = b'0' AND ${devSeedClassFilter('c')}`,
+        [user.id]
+      ),
+      queryOne(
+        `SELECT COUNT(*) AS n
+         FROM homework_assignments a
+         WHERE a.creator = ? AND a.deleted = b'0' AND a.create_time >= ? AND ${devSeedAssignmentFilter('a')}`,
+        [String(user.id), monthStart()]
+      ),
+      queryOne(
+        `SELECT COALESCE(SUM(c.member_count), 0) AS n
+         FROM homework_classes c
+         WHERE c.teacher_id = ? AND c.deleted = b'0' AND ${devSeedClassFilter('c')}`,
+        [user.id]
+      ),
       queryOne(
         `SELECT AVG(CASE WHEN si.max_score > 0 THEN si.score / si.max_score * 100 ELSE NULL END) AS n
          FROM homework_submission_item si
          JOIN homework_submission s ON s.id = si.submission_id AND s.deleted = b'0'
          JOIN homework_assignments a ON a.id = s.assignment_id AND a.deleted = b'0'
-         WHERE a.creator = ? AND si.deleted = b'0' AND si.create_time >= ?`,
+         WHERE a.creator = ? AND si.deleted = b'0' AND si.create_time >= ? AND ${devSeedAssignmentFilter('a')}`,
         [String(user.id), monthStart()]
       ),
     ])
@@ -740,7 +789,7 @@ async function studentOverview(req) {
       FROM homework_classes c
       LEFT JOIN homework_assignment_class ac ON ac.class_id = c.id AND ac.deleted = b'0'
       LEFT JOIN homework_submission s ON s.assignment_id = ac.assignment_id AND s.deleted = b'0'
-      WHERE c.teacher_id = ? AND c.deleted = b'0'
+      WHERE c.teacher_id = ? AND c.deleted = b'0' AND ${devSeedClassFilter('c')}
       GROUP BY c.id, c.name, s.student_id
       ORDER BY c.id`,
       [user.id]
@@ -793,13 +842,23 @@ async function questionStatistics(req) {
     if (!user) return fail('登录已过期', 401)
     const recentStart = daysAgoStart(7)
     const [total, self, recent, recentSelf] = await Promise.all([
-      queryOne("SELECT COUNT(*) AS n FROM homework_questions WHERE deleted = b'0'"),
-      queryOne("SELECT COUNT(*) AS n FROM homework_questions WHERE creator = ? AND deleted = b'0'", [String(user.id)]),
-      queryOne("SELECT COUNT(*) AS n FROM homework_questions WHERE deleted = b'0' AND create_time >= ?", [recentStart]),
-      queryOne("SELECT COUNT(*) AS n FROM homework_questions WHERE creator = ? AND deleted = b'0' AND create_time >= ?", [
-        String(user.id),
-        recentStart,
-      ]),
+      queryOne(
+        `SELECT COUNT(*) AS n FROM homework_questions q WHERE q.deleted = b'0' AND ${devSeedQuestionFilter('q')}`
+      ),
+      queryOne(
+        `SELECT COUNT(*) AS n FROM homework_questions q WHERE q.creator = ? AND q.deleted = b'0' AND ${devSeedQuestionFilter('q')}`,
+        [String(user.id)]
+      ),
+      queryOne(
+        `SELECT COUNT(*) AS n FROM homework_questions q WHERE q.deleted = b'0' AND q.create_time >= ? AND ${devSeedQuestionFilter('q')}`,
+        [recentStart]
+      ),
+      queryOne(
+        `SELECT COUNT(*) AS n
+         FROM homework_questions q
+         WHERE q.creator = ? AND q.deleted = b'0' AND q.create_time >= ? AND ${devSeedQuestionFilter('q')}`,
+        [String(user.id), recentStart]
+      ),
     ])
 
     return ok({
@@ -837,7 +896,7 @@ async function recentHomework(req) {
       LEFT JOIN homework_assignment_class ac ON ac.assignment_id = a.id AND ac.deleted = b'0'
       LEFT JOIN homework_classes c ON c.id = ac.class_id AND c.deleted = b'0'
       LEFT JOIN homework_submission s ON s.assignment_id = a.id AND s.deleted = b'0'
-      WHERE a.creator = ? AND a.deleted = b'0'
+      WHERE a.creator = ? AND a.deleted = b'0' AND ${devSeedAssignmentFilter('a')} AND (c.id IS NULL OR ${devSeedClassFilter('c')})
       GROUP BY a.id, a.title, a.grade, a.subject, c.id, c.name, c.member_count
       ORDER BY COALESCE(MIN(s.submitted_at), a.create_time) DESC
       LIMIT 20`,
@@ -894,7 +953,7 @@ async function recentAssignments(req) {
         COUNT(aq.question_id) AS questionNumbers
       FROM homework_assignments a
       LEFT JOIN homework_assignment_question aq ON aq.assignment_id = a.id AND aq.deleted = b'0'
-      WHERE a.creator = ? AND a.deleted = b'0'
+      WHERE a.creator = ? AND a.deleted = b'0' AND ${devSeedAssignmentFilter('a')}
       GROUP BY a.id, a.title, a.grade, a.subject, a.type, a.status
       ORDER BY a.create_time DESC
       LIMIT 5`,
