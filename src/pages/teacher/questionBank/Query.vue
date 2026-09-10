@@ -227,6 +227,21 @@ const buildQuestionPageParams = (): listQuestionBankRequest & Record<string, any
   assignmentType: normalizeSelectValue(filters.assignmentType),
 })
 
+const buildImportedQuestionPageParams = (payload?: UploadSubmitPayload): listQuestionBankRequest & Record<string, any> => {
+  const uploadParams = buildUploadParams(payload)
+
+  return {
+    pageNo: filters.pageNo,
+    pageSize: filters.pageSize,
+    questionType: normalizeSelectValue(filters.questionType),
+    difficulty: normalizeSelectValue(filters.difficulty),
+    stageId: uploadParams.stageId || normalizeSelectValue(filters.stageId, stageLabelToIdMap),
+    subjectId: uploadParams.subjectId || normalizeSelectValue(filters.subjectId, subjectLabelToIdMap),
+    gradeId: uploadParams.gradeId || normalizeSelectValue(filters.gradeId, gradeLabelToIdMap),
+    answered: normalizeSelectValue(filters.answered),
+  }
+}
+
 // 获取参数
 const getparams = (params: FilterParams) => {
   // 参数校验，避免解构 null 值
@@ -261,6 +276,13 @@ const tabChange = (key: string) => {
 // 列表接口
 const getQuestionPageList = async () => {
   const res = await listQuestionBank(buildQuestionPageParams())
+  const rows = getPageRows<questionBankItem>(res)
+  questionList.value = rows
+  total.value = getPageTotal(res, rows.length)
+}
+
+const getImportedQuestionPageList = async (payload?: UploadSubmitPayload) => {
+  const res = await listQuestionBank(buildImportedQuestionPageParams(payload))
   const rows = getPageRows<questionBankItem>(res)
   questionList.value = rows
   total.value = getPageTotal(res, rows.length)
@@ -346,7 +368,7 @@ const handleUploadSubmit = async (payload?: UploadSubmitPayload) => {
   }
 
   activeImportedDetailId.value = ''
-  await getQuestionPageList()
+  await getImportedQuestionPageList(payload)
 }
 </script>
 
