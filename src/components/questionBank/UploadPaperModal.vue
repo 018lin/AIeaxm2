@@ -46,23 +46,6 @@
                 </a-select-option>
               </a-select>
             </div>
-            <div class="select-item">
-              <div class="input-label">章节（选填）</div>
-              <a-tooltip :title="chapterSelectTip" :mouse-enter-delay="0.08" :mouse-leave-delay="0.08">
-                <span class="block">
-                  <a-select
-                    class="rc-select"
-                    allow-clear
-                    v-model:value="form.chapterId"
-                    placeholder="请选择章节"
-                    :options="chapterTreeData"
-                    :disabled="chapterSelectDisabled"
-                    :field-names="{ label: 'chapterName', value: 'chapterId', options: 'children' }"
-                    @dropdownVisibleChange="onChapterDropdown"
-                  ></a-select>
-                </span>
-              </a-tooltip>
-            </div>
           </div>
 
           <div class="field full mt-20 flex-col">
@@ -115,8 +98,8 @@
 </template>
 
 <script setup lang="ts">
-import { getChapterList, getDictList } from '@/api/common/index'
-import type { chapterResponse, dictListItem, dictListResponse } from '@/api/common/type'
+import { getDictList } from '@/api/common/index'
+import type { dictListItem, dictListResponse } from '@/api/common/type'
 import { importQuestionBankBatch } from '@/api/questionBank'
 import type { ImportQuestionBankBatchRequest } from '@/api/questionBank/type'
 import { selectEnum } from '@/enum/common'
@@ -151,7 +134,6 @@ const emit = defineEmits<{
 const loading = ref(false)
 type UploadMode = 'pdf' | 'image'
 const uploadMode = ref<UploadMode>('pdf')
-const chapterTreeData = ref<chapterResponse[]>([])
 const form = reactive<{
   stageId?: string
   gradeId?: string
@@ -159,7 +141,6 @@ const form = reactive<{
   questionBankTypeId?: string
   textbookVersionId?: string
   volume?: string
-  chapterId?: string
   fileList: UploadProps['fileList']
 }>({
   stageId: undefined,
@@ -168,14 +149,34 @@ const form = reactive<{
   questionBankTypeId: undefined,
   textbookVersionId: undefined,
   volume: undefined,
-  chapterId: undefined,
   fileList: [],
 })
 const gradeList = ref<dictListItem[]>([]) // 年级字典列表
-const subjectList = ref<dictListItem[]>([])
 const itemTypeList = ref<dictListItem[]>([])
 const versionList = ref<dictListItem[]>([])
 const volumeList = ref<dictListItem[]>([])
+
+const primarySubjectList: dictListItem[] = [
+  { label: '语文', dictValue: '1' },
+  { label: '数学', dictValue: '2' },
+  { label: '英语', dictValue: '3' },
+]
+
+const juniorSubjectList: dictListItem[] = [
+  ...primarySubjectList,
+  { label: '物理', dictValue: '4' },
+  { label: '化学', dictValue: '5' },
+  { label: '政治', dictValue: '6' },
+  { label: '地理', dictValue: '7' },
+  { label: '生物', dictValue: '8' },
+]
+
+const subjectList = computed(() => {
+  const stageId = String(form.stageId || '')
+  if (stageId === '1') return primarySubjectList
+  if (stageId === '2') return juniorSubjectList
+  return []
+})
 
 const uploadModeConfig: Record<UploadMode, { accept: string; allowed: Set<string>; label: string; tip: string }> = {
   pdf: {
@@ -195,21 +196,14 @@ const uploadModeConfig: Record<UploadMode, { accept: string; allowed: Set<string
 const uploadAccept = computed(() => uploadModeConfig[uploadMode.value].accept)
 const uploadTip = computed(() => uploadModeConfig[uploadMode.value].tip)
 
-const chapterSelectDisabled = computed(() => {
-  return !form.subject || !form.textbookVersionId || !form.volume || !form.gradeId
-})
-
-const chapterSelectTip = computed(() => {
-  if (!chapterSelectDisabled.value) return ''
-  if (!form.subject || !form.gradeId) return '请先选择科目和年级'
-  return '章节配置加载中，请稍后再试'
-})
-
 // 切换学段时，重置年级
 const changeStage = (value: string) => {
   // 重新获取年级列表
   getGadeList(value)
   form.gradeId = undefined
+  if (!subjectList.value.some(item => item.dictValue === form.subject)) {
+    form.subject = undefined
+  }
 }
 
 // 年级列表
@@ -244,11 +238,10 @@ const getDictItems = (res: dictListResponse[], dictType: string) => {
 
 const getDictData = async () => {
   const res = await getDictList({
-    dictTypes: [selectEnum.SUBJECT, selectEnum.ITEM_TYPE, selectEnum.TEXTBOOK_VERSION, selectEnum.TEXTBOOK_VOLUME],
+    dictTypes: [selectEnum.ITEM_TYPE, selectEnum.TEXTBOOK_VERSION, selectEnum.TEXTBOOK_VOLUME],
   })
   const resData = res || []
 
-  subjectList.value = getDictItems(resData, selectEnum.SUBJECT)
   itemTypeList.value = getDictItems(resData, selectEnum.ITEM_TYPE)
   versionList.value = getDictItems(resData, selectEnum.TEXTBOOK_VERSION)
   volumeList.value = getDictItems(resData, selectEnum.TEXTBOOK_VOLUME)
@@ -289,10 +282,8 @@ const resetForm = () => {
   form.questionBankTypeId = undefined
   form.textbookVersionId = undefined
   form.volume = undefined
-  form.chapterId = undefined
   form.fileList = []
   uploadMode.value = 'pdf'
-  chapterTreeData.value = []
 }
 
 // 关闭弹窗：上传中不允许关闭。
@@ -362,7 +353,6 @@ const handleOk = async () => {
       /* 切片上传
       files: uploadedRefs as any, */
     } as ImportQuestionBankBatchRequest
-    if (form.chapterId) params.chapterId = String(form.chapterId)
 
     await importQuestionBankBatch(params)
 
@@ -382,99 +372,11 @@ const handleOk = async () => {
   }
 }
 
-const getChapterTreeList = async () => {
-  if (chapterSelectDisabled.value) {
-    chapterTreeData.value = []
-    return
-  }
-
-  try {
-    const params = {
-      stage: form.stageId,
-      gradeId: form.gradeId,
-      subject: form.subject,
-      volume: form.volume,
-      textbookVersion: form.textbookVersionId,
-      parentId: '0',
-    }
-
-    const res = await getChapterList(params as any)
-    // console.log('章节数据原始返回:', res)
-
-    // 递归处理数据，确保每个节点都有 chapterName（如果没有则使用 unitName）
-    const processChapterData = (data: any): chapterResponse[] => {
-      if (!data) {
-        console.log('数据为空')
-        return []
-      }
-
-      if (!Array.isArray(data)) {
-        console.log('数据不是数组:', typeof data, data)
-        return []
-      }
-
-      const result = data
-        .map((item, index) => {
-          if (!item || typeof item !== 'object') {
-            console.log(`第 ${index} 项无效:`, item)
-            return null
-          }
-
-          const processedItem: any = {
-            chapterId: item.chapterId,
-            chapterName: item.chapterName || item.unitName || '未命名',
-            // 保留其他需要的字段
-            level: item.level,
-            parentId: item.parentId,
-          }
-
-          // 处理子节点
-          if (item.children && Array.isArray(item.children) && item.children.length > 0) {
-            const processedChildren = processChapterData(item.children)
-            // 只在有子节点时才添加 children 字段，且必须是数组
-            if (processedChildren.length > 0) {
-              processedItem.children = processedChildren
-            }
-          }
-          // 明确不设置 children 为 undefined
-
-          return processedItem
-        })
-        .filter(item => item !== null && item !== undefined)
-
-      // console.log('处理后的数据:', result)
-      return result
-    }
-
-    const processed = processChapterData(res)
-    // console.log('最终章节数据:', processed)
-    chapterTreeData.value = processed
-  } catch (error) {
-    console.error('获取章节列表失败:', error)
-    chapterTreeData.value = []
-  }
-}
-
-const onChapterDropdown = (open: boolean) => {
-  if (!open) return
-  if (chapterSelectDisabled.value) return
-  if (Array.isArray(chapterTreeData.value) && chapterTreeData.value.length > 0) return
-  getChapterTreeList().catch(() => {})
-}
-
-watch(
-  () => [form.gradeId, form.subject, form.textbookVersionId, form.volume],
-  () => {
-    if (form.chapterId) form.chapterId = undefined
-    chapterTreeData.value = []
-  }
-)
-
 watch(
   () => props.open,
   open => {
     if (!open) return
-    if (subjectList.value.length && itemTypeList.value.length && versionList.value.length && volumeList.value.length) {
+    if (itemTypeList.value.length && versionList.value.length && volumeList.value.length) {
       fillHiddenDefaults()
       return
     }
