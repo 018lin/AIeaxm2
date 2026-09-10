@@ -5,6 +5,8 @@ import { defineConfig, loadEnv } from 'vite'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd())
+  const apiBase = env.VITE_API_BASE || 'http://localhost:48080/app'
+  const apiOrigin = /^https?:\/\//i.test(apiBase) ? new URL(apiBase).origin : 'http://localhost:48080'
 
   return {
     plugins: [vue()],
@@ -30,7 +32,7 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/files': {
-          target: 'http://localhost:48080',
+          target: apiOrigin,
           changeOrigin: true,
         },
       },

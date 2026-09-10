@@ -25,9 +25,45 @@ loadEnvFile('.env.local')
 loadEnvFile('.env.development')
 loadEnvFile('.env.development.local')
 
+function envFlag(name) {
+  const value = process.env[name]
+  if (value == null || value === '') return null
+  return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase())
+}
+
+function shouldUseSsl(host = '') {
+  const explicit = envFlag('DB_SSL') ?? envFlag('MYSQL_SSL') ?? envFlag('TIDB_ENABLE_SSL')
+  if (explicit != null) return explicit
+  return /\.tidbcloud\.com$/i.test(host)
+}
+
+function sslConfig(host = '') {
+  if (!shouldUseSsl(host)) return undefined
+  return {
+    minVersion: 'TLSv1.2',
+    rejectUnauthorized: true,
+  }
+}
+
 function readDbConfig() {
   const url = process.env.DATABASE_URL || process.env.MYSQL_URL
-  if (url) return { uri: url }
+  if (url) {
+    let host = ''
+    try {
+      host = new URL(url).hostname
+    } catch {
+      host = ''
+    }
+
+    return {
+      uri: url,
+      waitForConnections: true,
+      connectionLimit: Number(process.env.DB_POOL_SIZE || 10),
+      namedPlaceholders: true,
+      timezone: '+08:00',
+      ssl: sslConfig(host),
+    }
+  }
 
   const host = process.env.DB_HOST || process.env.MYSQL_HOST
   const database = process.env.DB_NAME || process.env.DB_DATABASE || process.env.MYSQL_DATABASE
@@ -45,6 +81,7 @@ function readDbConfig() {
     connectionLimit: Number(process.env.DB_POOL_SIZE || 10),
     namedPlaceholders: true,
     timezone: '+08:00',
+    ssl: sslConfig(host),
   }
 }
 

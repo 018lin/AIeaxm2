@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "db:start": "powershell -ExecutionPolicy Bypass -File backend/start-mysql-3307.ps1",
+    "dev:api": "npm run db:start && npm run server:api",
     "server:api": "node backend/server.mjs",
     "build": "vite build",
     "build:local": "NODE_OPTIONS=--max-old-space-size=8192 vite build",
