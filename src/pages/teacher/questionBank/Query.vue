@@ -127,10 +127,88 @@ const gradeLabelToIdMap: Record<string, string> = {
   高三: '12',
 }
 
+type UploadSubmitPayload = {
+  stageId?: string
+  subject?: string
+  subjectId?: string
+  grade?: string
+  gradeId?: string
+  importResult?: (ImportQuestionBankBatchResponse & Record<string, any>) | Record<string, any>
+}
+
 const normalizeSelectValue = (value: unknown, labelMap?: Record<string, string>) => {
   const raw = String(value ?? '').trim()
   if (!raw || raw === 'all') return undefined
   return labelMap?.[raw] || raw
+}
+
+const firstNonEmptyString = (...values: unknown[]) => {
+  for (const value of values) {
+    if (value === undefined || value === null) continue
+    const normalized = String(value).trim()
+    if (normalized) return normalized
+  }
+  return ''
+}
+
+const unwrapResponseData = (value: any): any => {
+  let current = value
+  for (let i = 0; i < 3; i += 1) {
+    if (!current || typeof current !== 'object' || current.data === undefined) break
+    current = current.data
+  }
+  return current
+}
+
+const getFirstField = (source: any, fields: string[]) => {
+  if (!source || typeof source !== 'object') return ''
+  for (const field of fields) {
+    const value = firstNonEmptyString(source[field])
+    if (value) return value
+  }
+  return ''
+}
+
+const getFirstAttachmentId = (source: any) => {
+  const direct = getFirstField(source, ['attachmentId', 'attachId', 'fileId'])
+  if (direct) return direct
+
+  const files = Array.isArray(source?.successFiles) ? source.successFiles : []
+  for (const file of files) {
+    const attachmentId = getFirstField(file, ['attachmentId', 'attachId', 'id', 'fileId'])
+    if (attachmentId) return attachmentId
+  }
+  return ''
+}
+
+const delay = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
+
+const buildUploadParams = (payload?: UploadSubmitPayload) => ({
+  stageId: normalizeSelectValue(payload?.stageId, stageLabelToIdMap),
+  subjectId: normalizeSelectValue(payload?.subjectId || payload?.subject, subjectLabelToIdMap),
+  gradeId: normalizeSelectValue(payload?.gradeId || payload?.grade, gradeLabelToIdMap),
+})
+
+const syncFiltersWithUpload = (payload?: UploadSubmitPayload) => {
+  const uploadParams = buildUploadParams(payload)
+  if (uploadParams.stageId) filters.stageId = uploadParams.stageId
+  if (uploadParams.subjectId) filters.subjectId = uploadParams.subjectId
+  if (uploadParams.gradeId) filters.gradeId = uploadParams.gradeId
+}
+
+const getPageRows = <T = any>(response: any): T[] => {
+  const data = unwrapResponseData(response)
+  if (Array.isArray(data?.list)) return data.list
+  if (Array.isArray(data?.records)) return data.records
+  if (Array.isArray(data?.rows)) return data.rows
+  if (Array.isArray(data)) return data
+  return []
+}
+
+const getPageTotal = (response: any, fallbackCount: number) => {
+  const data = unwrapResponseData(response)
+  const total = Number(data?.total ?? data?.totalCount ?? data?.count)
+  return Number.isFinite(total) ? total : fallbackCount
 }
 
 const buildQuestionPageParams = (): listQuestionBankRequest & Record<string, any> => ({
@@ -183,8 +261,9 @@ const tabChange = (key: string) => {
 // 列表接口
 const getQuestionPageList = async () => {
   const res = await listQuestionBank(buildQuestionPageParams())
-  questionList.value = res.list || []
-  total.value = res.total || 0
+  const rows = getPageRows<questionBankItem>(res)
+  questionList.value = rows
+  total.value = getPageTotal(res, rows.length)
 }
 
 const getImportedDetailList = async (detailId: string) => {
@@ -193,8 +272,9 @@ const getImportedDetailList = async (detailId: string) => {
     pageNo: filters.pageNo,
     pageSize: filters.pageSize,
   })
-  questionList.value = res.list || []
-  total.value = res.total || 0
+  const rows = getPageRows<questionBankItem>(res)
+  questionList.value = rows
+  total.value = getPageTotal(res, rows.length)
 }
 
 const getDetailIdFromRow = (row?: QuestionBankDetailResponse) => {
@@ -203,21 +283,41 @@ const getDetailIdFromRow = (row?: QuestionBankDetailResponse) => {
   return row?.id === undefined || row?.id === null ? '' : String(row.id)
 }
 
-const resolveImportedDetailId = async (importResult?: ImportQuestionBankBatchResponse) => {
-  const directDetailId = String(importResult?.detailId || '').trim()
-  if (directDetailId) return directDetailId
-
-  const batchId = String(importResult?.batchId || '').trim()
+const queryImportedDetail = async (params: QuestionBankDetailQueryRequest) => {
   const res = await queryQuestionBankDetailPage({
     pageNo: 1,
     pageSize: 1,
-    batchId: batchId || undefined,
-    stageId: normalizeSelectValue(filters.stageId, stageLabelToIdMap),
-    subjectId: normalizeSelectValue(filters.subjectId, subjectLabelToIdMap),
-    gradeId: normalizeSelectValue(filters.gradeId, gradeLabelToIdMap),
+    ...params,
   })
 
-  return getDetailIdFromRow(res?.list?.[0])
+  return getDetailIdFromRow(getPageRows<QuestionBankDetailResponse>(res)[0])
+}
+
+const resolveImportedDetailId = async (payload?: UploadSubmitPayload) => {
+  const importResult = unwrapResponseData(payload?.importResult)
+  const directDetailId = getFirstField(importResult, ['detailId', 'questionBankDetailId', 'paperDetailId'])
+  if (directDetailId) return directDetailId
+
+  const batchId = getFirstField(importResult, ['batchId', 'batchNo', 'batchCode'])
+  const attachmentId = getFirstAttachmentId(importResult)
+  const uploadParams = buildUploadParams(payload)
+  const attempts: QuestionBankDetailQueryRequest[] = []
+
+  if (batchId) attempts.push({ batchId })
+  if (attachmentId) attempts.push({ attachmentId })
+  if (batchId) attempts.push({ batchId, ...uploadParams })
+  if (attachmentId) attempts.push({ attachmentId, ...uploadParams })
+  if (uploadParams.gradeId || uploadParams.subjectId || uploadParams.stageId) attempts.push(uploadParams)
+
+  for (let round = 0; round < 3; round += 1) {
+    for (const params of attempts) {
+      const detailId = await queryImportedDetail(params)
+      if (detailId) return detailId
+    }
+    if (round < 2) await delay(500)
+  }
+
+  return ''
 }
 
 const getList = async (payload?: { pageNo?: number }) => {
@@ -234,9 +334,10 @@ const getList = async (payload?: { pageNo?: number }) => {
   await getQuestionPageList()
 }
 
-const handleUploadSubmit = async (payload?: { importResult?: ImportQuestionBankBatchResponse }) => {
+const handleUploadSubmit = async (payload?: UploadSubmitPayload) => {
   filters.pageNo = 1
-  const importedDetailId = await resolveImportedDetailId(payload?.importResult)
+  syncFiltersWithUpload(payload)
+  const importedDetailId = await resolveImportedDetailId(payload)
 
   if (importedDetailId) {
     activeImportedDetailId.value = importedDetailId

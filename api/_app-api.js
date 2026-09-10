@@ -1645,6 +1645,7 @@ async function ensureQuestionImportSchema() {
       detail_id VARCHAR(120) NOT NULL,
       exam_title VARCHAR(500) NOT NULL,
       import_format VARCHAR(40) NOT NULL,
+      stage_id VARCHAR(40) NULL,
       source_exam_id VARCHAR(80) NULL,
       external_question_id VARCHAR(120) NULL,
       original_no INT NULL,
@@ -1664,7 +1665,24 @@ async function ensureQuestionImportSchema() {
       KEY idx_batch_id (batch_id)
     )
   `)
+  await ensureTableColumn('homework_question_import_meta', 'stage_id', 'VARCHAR(40) NULL')
   questionImportSchemaReady = true
+}
+
+async function ensureTableColumn(tableName, columnName, definition) {
+  const row = await queryOne(
+    `SELECT COUNT(*) AS n
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [tableName, columnName]
+  )
+  if (Number(row?.n || 0) > 0) return
+  try {
+    await query(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`)
+  } catch (error) {
+    if (error?.code === 'ER_DUP_FIELDNAME') return
+    throw error
+  }
 }
 
 function escapeHtml(value = '') {
@@ -1888,14 +1906,15 @@ async function importExamcooQuestionBank(req) {
 
     await query(
       `INSERT INTO homework_question_import_meta
-        (question_id, batch_id, detail_id, exam_title, import_format, source_exam_id, external_question_id, original_no,
+        (question_id, batch_id, detail_id, exam_title, import_format, stage_id, source_exam_id, external_question_id, original_no,
          section_title, stem_html, answer_html, correct_answer, options_json, images_json, creator, tenant_id)
-       VALUES (?, ?, ?, ?, 'examcoo_json', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, 'examcoo_json', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         questionId,
         batchId,
         detailId,
         examTitle,
+        String(fields.stageId || ''),
         String(payload.exam_id || ''),
         externalQuestionId,
         Number(question.no || 0) || null,
@@ -1958,7 +1977,7 @@ async function importImagePairQuestionBank({ fields, files, user }) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0, ?, ?, 0, ?)`,
       [
         title,
-        title,
+        content,
         String(fields.questionType || 'answer'),
         String(fields.difficulty || 'medium'),
         String(fields.subjectId || ''),
@@ -1979,14 +1998,15 @@ async function importImagePairQuestionBank({ fields, files, user }) {
 
     await query(
       `INSERT INTO homework_question_import_meta
-        (question_id, batch_id, detail_id, exam_title, import_format, source_exam_id, external_question_id, original_no,
+        (question_id, batch_id, detail_id, exam_title, import_format, stage_id, source_exam_id, external_question_id, original_no,
          section_title, stem_html, answer_html, correct_answer, options_json, images_json, creator, tenant_id)
-       VALUES (?, ?, ?, ?, 'image_pairs', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, 'image_pairs', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         questionId,
         batchId,
         detailId,
         examTitle,
+        String(fields.stageId || ''),
         batchId,
         `${no}-${normalizeFileName(questionFile.fileName || '')}`,
         no,
@@ -2050,6 +2070,7 @@ async function questionPage(req) {
           COALESCE(m.stem_html, q.content) AS questionContent,
           q.type AS questionType,
           q.difficulty,
+          COALESCE(m.stage_id, '') AS stageId,
           q.subject AS subjectId,
           q.subject AS subjectName,
           q.grade AS gradeId,
@@ -2087,6 +2108,7 @@ async function questionDetail(req) {
         COALESCE(m.stem_html, q.content) AS questionContent,
         q.type AS questionType,
         q.difficulty,
+        COALESCE(m.stage_id, '') AS stageId,
         q.subject AS subjectId,
         q.subject AS subjectName,
         q.grade AS gradeId,
@@ -2144,6 +2166,7 @@ async function questionBankDetailPage(req) {
           m.batch_id AS batchId,
           m.exam_title AS examTitle,
           m.import_format AS importFormat,
+          COALESCE(m.stage_id, '') AS stageId,
           q.subject AS subjectId,
           q.subject AS subjectName,
           q.grade AS gradeId,
@@ -2155,7 +2178,7 @@ async function questionBankDetailPage(req) {
          FROM homework_question_import_meta m
          JOIN homework_questions q ON q.id = m.question_id
          WHERE ${where} AND m.deleted = 0
-         GROUP BY m.detail_id, m.batch_id, m.exam_title, m.import_format, q.subject, q.grade, m.creator
+         GROUP BY m.detail_id, m.batch_id, m.exam_title, m.import_format, m.stage_id, q.subject, q.grade, m.creator
          UNION ALL
          SELECT
           MIN(q.id) AS id,
@@ -2163,6 +2186,7 @@ async function questionBankDetailPage(req) {
           CONCAT('local-', q.subject, '-', q.grade) AS batchId,
           CONCAT(q.grade, q.subject, '题库') AS examTitle,
           'local' AS importFormat,
+          '' AS stageId,
           q.subject AS subjectId,
           q.subject AS subjectName,
           q.grade AS gradeId,
@@ -2191,7 +2215,7 @@ async function questionBankDetailPage(req) {
         gradeName: row.gradeName,
         subjectId: row.subjectId,
         subjectName: row.subjectName,
-        stageId: '',
+        stageId: row.stageId || '',
         stageName: '',
         termId: '',
         termName: '',
@@ -2223,6 +2247,7 @@ async function questionBankDetailByPath(req) {
         m.batch_id AS batchId,
         m.exam_title AS examTitle,
         m.import_format AS importFormat,
+        COALESCE(m.stage_id, '') AS stageId,
         q.subject AS subjectId,
         q.subject AS subjectName,
         q.grade AS gradeId,
@@ -2232,7 +2257,7 @@ async function questionBankDetailByPath(req) {
        FROM homework_question_import_meta m
        JOIN homework_questions q ON q.id = m.question_id
        WHERE q.deleted = b'0' AND m.deleted = 0 AND m.detail_id = ?
-       GROUP BY m.detail_id, m.batch_id, m.exam_title, m.import_format, q.subject, q.grade
+       GROUP BY m.detail_id, m.batch_id, m.exam_title, m.import_format, m.stage_id, q.subject, q.grade
        LIMIT 1`,
       [detailId]
     )
@@ -2243,6 +2268,7 @@ async function questionBankDetailByPath(req) {
           CONCAT('local-', q.subject, '-', q.grade) AS detailId,
           CONCAT('local-', q.subject, '-', q.grade) AS batchId,
           CONCAT(q.grade, q.subject, '题库') AS examTitle,
+          '' AS stageId,
           q.subject AS subjectId,
           q.subject AS subjectName,
           q.grade AS gradeId,
@@ -2267,6 +2293,7 @@ async function questionBankDetailByPath(req) {
           gradeName: localRow.gradeName,
           subjectId: localRow.subjectId,
           subjectName: localRow.subjectName,
+          stageId: localRow.stageId || '',
           itemType: 'local',
           itemTypeName: '本地题库',
           auditStatus: 'AUDIT_PASS',
@@ -2283,6 +2310,7 @@ async function questionBankDetailByPath(req) {
       examTitle: row.examTitle,
       gradeId: row.gradeId,
       gradeName: row.gradeName,
+      stageId: row.stageId || '',
       subjectId: row.subjectId,
       subjectName: row.subjectName,
       itemType: row.importFormat || 'examcoo_json',
@@ -2358,6 +2386,7 @@ async function questionBankDetailQuestions(req) {
             q.content AS questionContent,
             q.type AS questionType,
             q.difficulty,
+            '' AS stageId,
             q.subject AS subjectId,
             q.subject AS subjectName,
             q.grade AS gradeId,
@@ -2400,6 +2429,7 @@ async function questionBankDetailQuestions(req) {
           COALESCE(m.stem_html, q.content) AS questionContent,
           q.type AS questionType,
           q.difficulty,
+          COALESCE(m.stage_id, '') AS stageId,
           q.subject AS subjectId,
           q.subject AS subjectName,
           q.grade AS gradeId,

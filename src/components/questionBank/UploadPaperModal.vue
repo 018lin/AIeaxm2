@@ -161,10 +161,15 @@ const emit = defineEmits<{
     value: {
       stageId?: string
       subject?: string
-      grade?: string
-      semester?: string
-      type?: string
+      subjectId?: string
+      gradeId?: string
+      questionBankTypeId?: string
+      textbookVersionId?: string
+      volume?: string
       fileList: UploadProps['fileList']
+      questionFileList?: UploadProps['fileList']
+      answerFileList?: UploadProps['fileList']
+      importResult?: ImportQuestionBankBatchResponse
     }
   ): void
 }>()
