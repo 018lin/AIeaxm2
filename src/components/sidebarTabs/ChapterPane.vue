@@ -27,68 +27,52 @@
         </a-select-option>
       </a-select>
     </div>
-    <div class="sidebar-form">
-      <div class="input-label">版本</div>
-      <a-select v-model:value="filters.textbookVersionId" class="chapter-select" placeholder="请选择版本">
-        <a-select-option v-for="item in versionList" :key="item.dictValue" :value="item.dictValue">
-          {{ item.label }}
-        </a-select-option>
-      </a-select>
-    </div>
-    <div class="sidebar-form">
-      <div class="input-label">册次</div>
-      <a-select v-model:value="filters.volumeId" class="chapter-select" placeholder="请选择册次">
-        <a-select-option v-for="item in volumeList" :key="item.dictValue" :value="item.dictValue">
-          {{ item.label }}
-        </a-select-option>
-      </a-select>
-    </div>
-    <!-- 树形组件 -->
-    <div class="tree-content flex-col flex-1">
-      <div class="tree-title">章节树</div>
-      <div class="tree-box flex-1">
-        <TreeCom :treeData="treeData" :loading="loading" type="chapter" @select="onSelect" />
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { getChapterList, getDictList } from '@/api/common/index'
-import type { chapterResponse, dictListResponse } from '@/api/common/type'
-import TreeCom from '@/components/sidebarTabs/TreeCom.vue'
-import { selectEnum } from '@/enum/common'
+import type { dictListItem } from '@/api/common/type'
 import { getUserBaseInfo } from '@/services/storage'
 import { dictGradeOneList, dictGradeThreeList, dictGradeTwoList, dictStageList } from '@/utils/dictList'
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 
 const emit = defineEmits(['select'])
-const onSelect = (chapterId: string) => {
-  emit('select', { chapterId })
-}
 
 // 状态
 const parsedUserInfo = getUserBaseInfo()
-const subjectList = ref<dictListResponse[]>([]) // 学科字典列表
-const gradeList = ref<dictListResponse[]>([]) // 年级字典列表
-const versionList = ref<dictListResponse[]>([]) // 版本字典列表
-const volumeList = ref<dictListResponse[]>([]) // 册次字典列表
-const treeData = ref<chapterResponse[]>([])
-const loading = ref(false)
 const isInitializing = ref(true) // 标记是否正在初始化
+const gradeList = ref<dictListItem[]>([]) // 年级字典列表
+
+const primarySubjectList: dictListItem[] = [
+  { label: '语文', dictValue: '1' },
+  { label: '数学', dictValue: '2' },
+  { label: '英语', dictValue: '3' },
+]
+
+const juniorSubjectList: dictListItem[] = [
+  ...primarySubjectList,
+  { label: '物理', dictValue: '4' },
+  { label: '化学', dictValue: '5' },
+  { label: '政治', dictValue: '6' },
+  { label: '地理', dictValue: '7' },
+  { label: '生物', dictValue: '8' },
+]
+
+const subjectList = computed(() => {
+  if (filters.stageId === '1') return primarySubjectList
+  if (filters.stageId === '2') return juniorSubjectList
+  return []
+})
+
 // 筛选条件
 const filters = reactive<{
   stageId: string | undefined
   subjectId: string | undefined
   gradeId: string | undefined
-  textbookVersionId: string | undefined
-  volumeId: string | undefined
 }>({
   stageId: parsedUserInfo?.stageId || undefined,
   subjectId: parsedUserInfo?.subjectId || undefined,
   gradeId: parsedUserInfo?.gradeId || undefined,
-  textbookVersionId: '3',
-  volumeId: '2',
 })
 
 // 切换学段时，重置年级
@@ -96,6 +80,9 @@ const changeStage = (value: string) => {
   // 重新获取年级列表
   getGadeList(value)
   filters.gradeId = undefined
+  if (!subjectList.value.some(item => item.dictValue === filters.subjectId)) {
+    filters.subjectId = undefined
+  }
 }
 
 // 年级列表
@@ -107,93 +94,34 @@ const getGadeList = (value: string) => {
     gradeList.value = dictGradeTwoList
   } else if (value === '3') {
     gradeList.value = dictGradeThreeList
+  } else {
+    gradeList.value = []
   }
 }
 
-onMounted(async () => {
+onMounted(() => {
   initFiltersData()
   getGadeList(filters.stageId || '')
-  await getDictData([selectEnum.SUBJECT, selectEnum.TEXTBOOK_VERSION, selectEnum.TEXTBOOK_VOLUME])
   // 初始化完成后再 emit，避免多次触发
   isInitializing.value = false
-  emit('select', filters)
+  emit('select', getQueryParams())
 })
 
 const initFiltersData = () => {
   filters.stageId = parsedUserInfo?.stageId || undefined
   filters.subjectId = parsedUserInfo?.subjectId || undefined
   filters.gradeId = parsedUserInfo?.gradeId || undefined
-  filters.textbookVersionId = '3'
-  filters.volumeId = '2'
-}
-
-// 获取字典数据
-const getDictData = async (type: string[]) => {
-  const res = await getDictList({ dictTypes: type })
-  const resData = res || []
-
-  // 遍历返回的字典数据，根据 dictType 分别赋值
-  resData.forEach(item => {
-    if (item.dictType === selectEnum.SUBJECT) {
-      subjectList.value = item.dictTypeList || []
-    } else if (item.dictType === selectEnum.TEXTBOOK_VERSION) {
-      versionList.value = item.dictTypeList || []
-      const firstVersion = versionList.value[0]
-      // 设置默认值：如果未选择，则默认显示第一条数据
-      if (!filters.textbookVersionId && firstVersion?.dictValue) {
-        filters.textbookVersionId = firstVersion.dictValue
-      }
-    } else if (item.dictType === selectEnum.TEXTBOOK_VOLUME) {
-      volumeList.value = item.dictTypeList || []
-      const firstVolume = volumeList.value[0]
-      // 设置默认值：如果未选择，则默认显示第一条数据
-      if (!filters.volumeId && firstVolume?.dictValue) {
-        filters.volumeId = firstVolume.dictValue
-      }
-    }
-  })
-
-  getChapterData()
-}
-
-// 获取章节列表
-const getChapterData = async () => {
-  if (!filters.stageId) {
-    console.warn('学段未选择，无法获取章节数据')
-    return
-  }
-  if (!filters.gradeId) {
-    console.warn('年级未选择，无法获取章节数据')
-    return
-  }
-  if (!filters.subjectId) {
-    console.warn('学科未选择，无法获取章节数据')
-    return
-  }
-  if (!filters.textbookVersionId) {
-    console.warn('版本未选择，无法获取章节数据')
-    return
-  }
-  if (!filters.volumeId) {
-    console.warn('册次未选择，无法获取章节数据')
-    return
-  }
-
-  loading.value = true
-  try {
-    const res = await getChapterList({
-      stage: filters.stageId,
-      gradeId: filters.gradeId,
-      subject: filters.subjectId,
-      textbookVersion: filters.textbookVersionId,
-      volume: filters.volumeId,
-      parentId: '0',
-    } as any)
-    treeData.value = res || []
-  } finally {
-    loading.value = false
+  if (!subjectList.value.some(item => item.dictValue === filters.subjectId)) {
+    filters.subjectId = undefined
   }
 }
+
+const getQueryParams = () => ({
+  ...filters,
+  chapterId: undefined,
+  textbookVersionId: undefined,
+  volumeId: undefined,
+})
 
 watch(
   () => filters,
@@ -201,12 +129,7 @@ watch(
     // 初始化阶段不触发
     if (isInitializing.value) return
 
-    getChapterData()
-    const params = {
-      ...filters,
-      ...{ chapterId: undefined }, // 切换筛选条件时重置章节ID
-    }
-    emit('select', params)
+    emit('select', getQueryParams())
   },
   { deep: true }
 )
@@ -233,23 +156,6 @@ watch(
     :deep(.ant-select) {
       border-radius: 6px;
       background: #f5f7fa;
-    }
-  }
-
-  .tree-content {
-    width: 100%;
-    flex: 1;
-    overflow-y: auto;
-    border: 1px solid #f2ebe6;
-    border-radius: 6px;
-
-    .tree-box {
-      overflow-y: auto;
-    }
-    .tree-title {
-      border-radius: 6px 6px 0 0;
-      padding: 14px 16px;
-      background: #f8f7f6;
     }
   }
 }
