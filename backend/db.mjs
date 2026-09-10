@@ -92,7 +92,9 @@ export function hasDatabaseConfig() {
 export function getPool() {
   const config = readDbConfig()
   if (!config) {
-    throw new Error('未配置真实数据库，请设置 DATABASE_URL 或 DB_HOST/DB_NAME/DB_USER/DB_PASSWORD')
+    throw new Error(
+      '未配置真实数据库。推荐设置 APP_API_PROXY_TARGET 代理到业务后端；如需直连数据库调试，请设置 DATABASE_URL 或 DB_HOST/DB_NAME/DB_USER/DB_PASSWORD'
+    )
   }
 
   if (!pool) {

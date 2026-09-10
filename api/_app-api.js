@@ -45,7 +45,10 @@ function fail(message, code = 500) {
 }
 
 function dbUnavailable() {
-  return fail('未配置真实数据库，已停止返回演示假数据。请设置 DATABASE_URL 或 DB_HOST/DB_NAME/DB_USER/DB_PASSWORD。', 503)
+  return fail(
+    '未配置真实业务后端或数据库，已停止返回演示假数据。请设置 APP_API_PROXY_TARGET，或仅在直连数据库调试时设置 DATABASE_URL / DB_HOST / DB_NAME / DB_USER / DB_PASSWORD。',
+    503
+  )
 }
 
 function dbError(error) {
@@ -2117,6 +2120,7 @@ export async function executeByPath(req) {
   const endpointMap = {
     '/oauth/public-key': 'public-key',
     '/api/oauth/public-key': 'public-key',
+    '/api/v1/oauth/public-key': 'public-key',
     '/api/v1/oauth/login': 'oauth-login',
     '/api/v1/oauth/refresh-token': 'oauth-refresh-token',
     '/api/v1/auth/refresh-token': 'oauth-refresh-token',

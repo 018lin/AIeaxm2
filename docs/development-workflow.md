@@ -48,8 +48,9 @@ pnpm dev
 
 ```bash
 # API配置
-VITE_API_BASE=http://localhost:3000/api
-VITE_USE_MOCK=true
+VITE_API_BASE=http://localhost:48180/app
+VITE_USE_MOCK=false
+APP_API_PROXY_TARGET=https://your-business-api-host
 
 # 功能开关
 VITE_ENABLE_ANALYTICS=true
@@ -342,8 +343,9 @@ pnpm preview
 
 ```bash
 # 生产环境变量
-VITE_API_BASE=https://api.production.com
+VITE_API_BASE=
 VITE_USE_MOCK=false
+APP_API_PROXY_TARGET=https://your-business-api-host
 VITE_ENABLE_ANALYTICS=true
 VITE_ENVIRONMENT=production
 ```

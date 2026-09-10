@@ -10,7 +10,7 @@ import type {
 
 // 获取公钥
 export function getPublicKey() {
-  return requestGet<string>('/oauth/public-key')
+  return requestGet<string>('/api/v1/oauth/public-key')
 }
 
 // 用户登录

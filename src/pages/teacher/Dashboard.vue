@@ -4,7 +4,7 @@
       <div class="tch-db-hero-left">
         <h1 v-if="teacherDisplayName" class="bold">{{ teacherDisplayName }}，欢迎您</h1>
         <div class="tch-db-hero-desc">
-          这里是您的专属教学工作台。作业布置、数据采集、分析报告一站全搞定。系统已为您更新了最新的班级学情数据。
+          这里是您的专属教学工作台。作业布置、数据采集、分析报告一站全搞定。页面内容将根据当前账号的真实业务数据展示。
         </div>
       </div>
       <div class="tch-db-hero-right" aria-hidden="true">
