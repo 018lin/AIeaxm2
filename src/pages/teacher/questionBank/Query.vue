@@ -46,8 +46,13 @@
 </template>
 
 <script setup lang="ts">
-import { listQuestionBank } from '@/api/questionBank/index'
-import type { questionBankItem } from '@/api/questionBank/type'
+import { getQuestionBankDetailList, listQuestionBank, queryQuestionBankDetailPage } from '@/api/questionBank/index'
+import type {
+  ImportQuestionBankBatchResponse,
+  listQuestionBankRequest,
+  QuestionBankDetailResponse,
+  questionBankItem,
+} from '@/api/questionBank/type'
 import QuestionList from '@/components/common/QuestionList.vue'
 import QuestionTopFilter from '@/components/common/QuestionTopFilter.vue'
 import TchPagination from '@/components/common/table/TchPagination.vue'
@@ -70,6 +75,7 @@ interface FilterParams {
 const total = ref(0)
 const questionList = ref<questionBankItem[]>([]) // 题库列表
 const isUploadModalOpen = ref(false)
+const activeImportedDetailId = ref('')
 const filters = reactive({
   pageNo: 1,
   pageSize: 5,
@@ -91,6 +97,58 @@ const allTabs = [
   { key: 'platform', label: '平台题库' },
 ]
 
+const stageLabelToIdMap: Record<string, string> = {
+  小学: '1',
+  初中: '2',
+  高中: '3',
+}
+const subjectLabelToIdMap: Record<string, string> = {
+  语文: '1',
+  数学: '2',
+  英语: '3',
+  物理: '4',
+  化学: '5',
+  政治: '6',
+  地理: '7',
+  生物: '8',
+}
+const gradeLabelToIdMap: Record<string, string> = {
+  一年级: '1',
+  二年级: '2',
+  三年级: '3',
+  四年级: '4',
+  五年级: '5',
+  六年级: '6',
+  七年级: '7',
+  八年级: '8',
+  九年级: '9',
+  高一: '10',
+  高二: '11',
+  高三: '12',
+}
+
+const normalizeSelectValue = (value: unknown, labelMap?: Record<string, string>) => {
+  const raw = String(value ?? '').trim()
+  if (!raw || raw === 'all') return undefined
+  return labelMap?.[raw] || raw
+}
+
+const buildQuestionPageParams = (): listQuestionBankRequest & Record<string, any> => ({
+  pageNo: filters.pageNo,
+  pageSize: filters.pageSize,
+  questionType: normalizeSelectValue(filters.questionType),
+  difficulty: normalizeSelectValue(filters.difficulty),
+  stageId: normalizeSelectValue(filters.stageId, stageLabelToIdMap),
+  subjectId: normalizeSelectValue(filters.subjectId, subjectLabelToIdMap),
+  gradeId: normalizeSelectValue(filters.gradeId, gradeLabelToIdMap),
+  chapterId: normalizeSelectValue(filters.chapterId),
+  knowledgePointId: normalizeSelectValue(filters.knowledgePointId),
+  answered: normalizeSelectValue(filters.answered),
+  textbookVersionId: normalizeSelectValue(filters.textbookVersionId),
+  volume: normalizeSelectValue(filters.volumeId),
+  assignmentType: normalizeSelectValue(filters.assignmentType),
+})
+
 // 获取参数
 const getparams = (params: FilterParams) => {
   // 参数校验，避免解构 null 值
@@ -99,6 +157,7 @@ const getparams = (params: FilterParams) => {
     return
   }
   Object.assign(filters, params)
+  activeImportedDetailId.value = ''
 
   // 重置分页并刷新列表
   filters.pageNo = 1
@@ -107,6 +166,7 @@ const getparams = (params: FilterParams) => {
 
 // 切换Tab
 const tabChange = (key: string) => {
+  activeImportedDetailId.value = ''
   if (key === 'chapter') {
     filters.knowledgePointId = ''
     filters.assignmentType = 'chapter_query'
@@ -121,15 +181,71 @@ const tabChange = (key: string) => {
 }
 
 // 列表接口
-const getList = async () => {
-  const res = await listQuestionBank(filters)
+const getQuestionPageList = async () => {
+  const res = await listQuestionBank(buildQuestionPageParams())
   questionList.value = res.list || []
   total.value = res.total || 0
 }
 
-const handleUploadSubmit = () => {
+const getImportedDetailList = async (detailId: string) => {
+  const res = await getQuestionBankDetailList({
+    detailId,
+    pageNo: filters.pageNo,
+    pageSize: filters.pageSize,
+  })
+  questionList.value = res.list || []
+  total.value = res.total || 0
+}
+
+const getDetailIdFromRow = (row?: QuestionBankDetailResponse) => {
+  const detailId = String(row?.detailId || '').trim()
+  if (detailId) return detailId
+  return row?.id === undefined || row?.id === null ? '' : String(row.id)
+}
+
+const resolveImportedDetailId = async (importResult?: ImportQuestionBankBatchResponse) => {
+  const directDetailId = String(importResult?.detailId || '').trim()
+  if (directDetailId) return directDetailId
+
+  const batchId = String(importResult?.batchId || '').trim()
+  const res = await queryQuestionBankDetailPage({
+    pageNo: 1,
+    pageSize: 1,
+    batchId: batchId || undefined,
+    stageId: normalizeSelectValue(filters.stageId, stageLabelToIdMap),
+    subjectId: normalizeSelectValue(filters.subjectId, subjectLabelToIdMap),
+    gradeId: normalizeSelectValue(filters.gradeId, gradeLabelToIdMap),
+  })
+
+  return getDetailIdFromRow(res?.list?.[0])
+}
+
+const getList = async (payload?: { pageNo?: number }) => {
+  const nextPageNo = Number(payload?.pageNo)
+  if (Number.isFinite(nextPageNo) && nextPageNo > 0) {
+    filters.pageNo = nextPageNo
+  }
+
+  if (activeImportedDetailId.value) {
+    await getImportedDetailList(activeImportedDetailId.value)
+    return
+  }
+
+  await getQuestionPageList()
+}
+
+const handleUploadSubmit = async (payload?: { importResult?: ImportQuestionBankBatchResponse }) => {
   filters.pageNo = 1
-  getList()
+  const importedDetailId = await resolveImportedDetailId(payload?.importResult)
+
+  if (importedDetailId) {
+    activeImportedDetailId.value = importedDetailId
+    await getImportedDetailList(importedDetailId)
+    return
+  }
+
+  activeImportedDetailId.value = ''
+  await getQuestionPageList()
 }
 </script>
 

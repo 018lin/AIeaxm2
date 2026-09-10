@@ -6,6 +6,9 @@ export const dictStageList = [
 ]
 // 年级
 export const dictGradeOneList = [
+  { dictValue: '1', label: '一年级' },
+  { dictValue: '2', label: '二年级' },
+  { dictValue: '3', label: '三年级' },
   { dictValue: '4', label: '四年级' },
   { dictValue: '5', label: '五年级' },
   { dictValue: '6', label: '六年级' },

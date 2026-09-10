@@ -11,7 +11,7 @@
     <div class="upload-card">
       <div class="upload-header">
         <div class="title-cn">录入题目</div>
-        <div class="sub">请填写题目归属信息，并选择 PDF、图片或 JSON 题库文件上传入库</div>
+        <div class="sub">{{ uploadIntro }}</div>
       </div>
 
       <a-spin class="upload-form-spin" :spinning="loading" tip="上传中..." size="large" :delay="120">
@@ -53,17 +53,9 @@
               <span>上传方式</span>
             </div>
             <a-radio-group v-model:value="uploadMode" button-style="solid" class="upload-mode-group">
-              <a-radio-button value="pdf">
-                <FilePdfOutlined />
-                PDF 文件
-              </a-radio-button>
-              <a-radio-button value="image">
-                <PictureOutlined />
-                图片
-              </a-radio-button>
-              <a-radio-button value="json">
-                <FileTextOutlined />
-                JSON题库
+              <a-radio-button v-for="mode in availableUploadModes" :key="mode" :value="mode">
+                <component :is="uploadModeIconMap[mode]" />
+                {{ uploadModeConfig[mode].label }}
               </a-radio-button>
             </a-radio-group>
           </div>
@@ -105,7 +97,7 @@
 import { getDictList } from '@/api/common/index'
 import type { dictListItem, dictListResponse } from '@/api/common/type'
 import { importQuestionBankBatch } from '@/api/questionBank'
-import type { ImportQuestionBankBatchRequest } from '@/api/questionBank/type'
+import type { ImportQuestionBankBatchRequest, ImportQuestionBankBatchResponse } from '@/api/questionBank/type'
 import { selectEnum } from '@/enum/common'
 // 切片上传
 // import { uploadFileResumable } from '@/services/fragmentedUpload'
@@ -137,7 +129,9 @@ const emit = defineEmits<{
 
 const loading = ref(false)
 type UploadMode = 'pdf' | 'image' | 'json'
-const uploadMode = ref<UploadMode>('pdf')
+const jsonOnlyUpload = Boolean(import.meta.env.PROD)
+const getDefaultUploadMode = (): UploadMode => (jsonOnlyUpload ? 'json' : 'pdf')
+const uploadMode = ref<UploadMode>(getDefaultUploadMode())
 const defaultEntryConfig = {
   questionBankTypeId: 'sync',
   textbookVersionId: 'default',
@@ -208,6 +202,17 @@ const uploadModeConfig: Record<UploadMode, { accept: string; allowed: Set<string
   },
 }
 
+const uploadModeIconMap = {
+  pdf: FilePdfOutlined,
+  image: PictureOutlined,
+  json: FileTextOutlined,
+}
+const availableUploadModes = computed<UploadMode[]>(() => (jsonOnlyUpload ? ['json'] : ['pdf', 'image', 'json']))
+const uploadIntro = computed(() =>
+  jsonOnlyUpload
+    ? '请填写题目归属信息，并选择 JSON 题库文件上传入库'
+    : '请填写题目归属信息，并选择 PDF、图片或 JSON 题库文件上传入库'
+)
 const uploadAccept = computed(() => uploadModeConfig[uploadMode.value].accept)
 const uploadTip = computed(() => uploadModeConfig[uploadMode.value].tip)
 
@@ -374,7 +379,7 @@ const resetForm = () => {
   form.textbookVersionId = defaultEntryConfig.textbookVersionId
   form.volume = defaultEntryConfig.volume
   form.fileList = []
-  uploadMode.value = 'pdf'
+  uploadMode.value = getDefaultUploadMode()
 }
 
 // 关闭弹窗：上传中不允许关闭。
@@ -450,10 +455,13 @@ const handleOk = async () => {
       files: uploadedRefs as any, */
     } as ImportQuestionBankBatchRequest
 
-    await importQuestionBankBatch(params)
+    const importResult = await importQuestionBankBatch(params)
 
-    message.success('题目录入成功')
-    emit('submit', submitSnapshot)
+    const importedCount = Number(importResult?.importedQuestionCount || 0)
+    message.success(importedCount > 0 ? `题目录入成功，已导入 ${importedCount} 道题` : '题目录入成功')
+    emit('submit', { ...submitSnapshot, importResult } as typeof submitSnapshot & {
+      importResult?: ImportQuestionBankBatchResponse
+    })
 
     resetForm()
     emit('update:open', false)
@@ -472,6 +480,9 @@ watch(
   () => props.open,
   open => {
     if (!open) return
+    if (!availableUploadModes.value.includes(uploadMode.value)) {
+      uploadMode.value = getDefaultUploadMode()
+    }
     if (itemTypeList.value.length && versionList.value.length && volumeList.value.length) {
       fillHiddenDefaults()
       return
