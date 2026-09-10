@@ -6,7 +6,6 @@ import type {
   classPageVO,
   CorrectGradingResultRequest,
   dictListRequest,
-  dictListResponse,
   HomeworkStudentListMapVO,
   HomeworkStudentListRequest,
   knowledgeTreeRequest,
@@ -15,6 +14,7 @@ import type {
   tagListRequest,
   tagListResponse,
 } from './type'
+import { normalizeDictList } from './dict'
 
 // 获取标签列表
 export function getTagList(params: tagListRequest) {
@@ -23,7 +23,9 @@ export function getTagList(params: tagListRequest) {
 
 // 获取字典列表
 export function getDictList(params: dictListRequest) {
-  return requestGet<dictListResponse[], dictListRequest>('/system/dict-data/query-types', params)
+  return requestGet<unknown, dictListRequest>('/api/system/dict-data/query-types', params).then(res =>
+    normalizeDictList(res, params.dictTypes)
+  )
 }
 
 // 获取知识点列表

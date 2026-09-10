@@ -2290,6 +2290,83 @@ async function emptyList() {
   return ok([])
 }
 
+const fallbackDictItems = {
+  ipta_stage: [
+    { dictValue: '1', label: '小学' },
+    { dictValue: '2', label: '初中' },
+    { dictValue: '3', label: '高中' },
+  ],
+  ipta_grade: [
+    { dictValue: '4', label: '四年级' },
+    { dictValue: '5', label: '五年级' },
+    { dictValue: '6', label: '六年级' },
+    { dictValue: '7', label: '七年级' },
+    { dictValue: '8', label: '八年级' },
+    { dictValue: '9', label: '九年级' },
+    { dictValue: '10', label: '高一' },
+    { dictValue: '11', label: '高二' },
+    { dictValue: '12', label: '高三' },
+  ],
+  ipta_subject: [
+    { dictValue: '1', label: '语文' },
+    { dictValue: '2', label: '数学' },
+    { dictValue: '3', label: '英语' },
+    { dictValue: '4', label: '物理' },
+    { dictValue: '5', label: '化学' },
+    { dictValue: '6', label: '政治' },
+    { dictValue: '7', label: '地理' },
+    { dictValue: '8', label: '生物' },
+  ],
+  ipta_term: [
+    { dictValue: '1', label: '上学期' },
+    { dictValue: '2', label: '下学期' },
+  ],
+  ipta_item_type: [
+    { dictValue: 'sync', label: '同步练习' },
+    { dictValue: 'weekly', label: '周测' },
+    { dictValue: 'monthly', label: '月考' },
+    { dictValue: 'midTerm', label: '期中' },
+    { dictValue: 'finalTerm', label: '期末' },
+  ],
+  ipta_question_bank_source: [
+    { dictValue: '1', label: '试卷' },
+    { dictValue: '2', label: '教辅书' },
+  ],
+  ipta_textbook_version: [{ dictValue: 'default', label: '通用版本' }],
+  ipta_textbook_volume: [
+    { dictValue: '1', label: '上册' },
+    { dictValue: '2', label: '下册' },
+  ],
+}
+
+function dictQueryTypes(req) {
+  const params = readQueryParams(req)
+  const body = req.body && typeof req.body === 'object' ? req.body : {}
+  const requested = [
+    ...params.getAll('dictTypes'),
+    ...params.getAll('dictTypes[]'),
+    ...(Array.isArray(body.dictTypes) ? body.dictTypes : []),
+    ...(Array.isArray(body['dictTypes[]']) ? body['dictTypes[]'] : []),
+  ]
+    .flatMap(item => String(item || '').split(','))
+    .map(item => item.trim())
+    .filter(Boolean)
+
+  const types = requested.length ? requested : Object.keys(fallbackDictItems)
+  return ok(
+    types.map(dictType => ({
+      dictType,
+      dictTypeList: (fallbackDictItems[dictType] || []).map((item, index) => ({
+        id: index + 1,
+        dictType,
+        dictValue: item.dictValue,
+        value: item.dictValue,
+        label: item.label,
+      })),
+    }))
+  )
+}
+
 function aiGradingMaterialSources() {
   return ok([
     { source: 'scanner_scan', sourceName: '扫描机扫描' },
@@ -2505,11 +2582,19 @@ async function groupingStrategyPage() {
   }
 }
 
+function proxyPathFor(originalPath) {
+  const path = String(originalPath || '')
+  if (/^\/api\/(?:v\d+\/)?system\//.test(path)) {
+    return path.replace(/^\/api\/(?:v\d+\/)?system/, '/system')
+  }
+  return path
+}
+
 async function proxyRequest(req, originalPath) {
   const originalUrl = new URL(req.url || '/', 'http://localhost')
   const target = new URL(proxyTarget)
   const basePath = target.pathname.replace(/\/+$/, '')
-  const requestPath = String(originalPath || '').replace(/^\/+/, '')
+  const requestPath = proxyPathFor(originalPath).replace(/^\/+/, '')
   target.pathname = `${basePath}/${requestPath}`.replace(/\/{2,}/g, '/')
   target.search = originalUrl.search
   const method = String(req.method || 'GET').toUpperCase()
@@ -2556,6 +2641,7 @@ export async function executeApi(req, endpoint) {
   if (endpoint === 'oauth-logout' && method === 'POST') return ok(true)
   if (endpoint === 'reset-password' && method === 'POST') return fail('真实重置密码接口尚未接入，请配置 APP_API_PROXY_TARGET 转发到业务后端。', 501)
   if (endpoint === 'forgot-password' && method === 'POST') return fail('真实忘记密码接口尚未接入，请配置 APP_API_PROXY_TARGET 转发到业务后端。', 501)
+  if (endpoint === 'dict-query-types' && method === 'GET') return dictQueryTypes(req)
   if (endpoint === 'homework-material-sources' && method === 'GET') {
     if (!requireAuth(req)) return fail('登录已过期', 401)
     return aiGradingMaterialSources()
@@ -2734,6 +2820,9 @@ export async function executeByPath(req) {
     '/api/v1/oauth/reset-password': 'reset-password',
     '/api/v1/oauth/forgot-password': 'forgot-password',
     '/api/v1/oauth/get-permission-info': 'permission-info',
+    '/api/system/dict-data/query-types': 'dict-query-types',
+    '/api/v1/system/dict-data/query-types': 'dict-query-types',
+    '/system/dict-data/query-types': 'dict-query-types',
     '/api/v1/permission/validate': 'permission-validate',
     '/api/v1/permission/sync': 'permission-sync',
     '/api/v1/teacher/teacher-info': 'teacher-info',

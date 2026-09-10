@@ -19,7 +19,7 @@
     "type-check": "vue-tsc --noEmit",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
     "lint:check": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts",
-    "test": "vitest",
+    "test": "node --test api/_app-api.test.js",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage"
   },
