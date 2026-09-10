@@ -9,7 +9,13 @@
       <!-- 右侧内容区 -->
       <main class="exam-content flex-col flex-1 gap-sm">
         <!-- 顶部筛选区 -->
-        <QuestionTopFilter @getList="getparams" showAnswer :subjectId="filters.subjectId" />
+        <div class="query-toolbar">
+          <QuestionTopFilter class="query-filter" @getList="getparams" showAnswer :subjectId="filters.subjectId" />
+          <a-button type="primary" class="entry-btn primary-btn" @click="isUploadModalOpen = true">
+            <template #icon><PlusOutlined /></template>
+            录入题目
+          </a-button>
+        </div>
 
         <template v-if="questionList.length">
           <QuestionList
@@ -33,6 +39,7 @@
             <a-empty :image="simpleImage" description="暂无数据" />
           </div>
         </template>
+        <UploadPaperModal v-model:open="isUploadModalOpen" @submit="handleUploadSubmit" />
       </main>
     </div>
   </div>
@@ -44,8 +51,10 @@ import type { questionBankItem } from '@/api/questionBank/type'
 import QuestionList from '@/components/common/QuestionList.vue'
 import QuestionTopFilter from '@/components/common/QuestionTopFilter.vue'
 import TchPagination from '@/components/common/table/TchPagination.vue'
+import UploadPaperModal from '@/components/questionBank/UploadPaperModal.vue'
 import SidebarTabs from '@/components/sidebarTabs/SidebarTabs.vue'
 
+import { PlusOutlined } from '@ant-design/icons-vue'
 import { Empty } from 'ant-design-vue'
 import { reactive, ref } from 'vue'
 
@@ -60,6 +69,7 @@ interface FilterParams {
 // 分页与筛选
 const total = ref(0)
 const questionList = ref<questionBankItem[]>([]) // 题库列表
+const isUploadModalOpen = ref(false)
 const filters = reactive({
   pageNo: 1,
   pageSize: 5,
@@ -116,6 +126,11 @@ const getList = async () => {
   questionList.value = res.list || []
   total.value = res.total || 0
 }
+
+const handleUploadSubmit = () => {
+  filters.pageNo = 1
+  getList()
+}
 </script>
 
 <style scoped lang="scss">
@@ -149,6 +164,23 @@ const getList = async () => {
   min-width: 500px;
   overflow-x: auto;
   max-height: var(--content-height);
+}
+
+.query-toolbar {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.query-filter {
+  flex: 1;
+  min-width: 0;
+}
+
+.entry-btn {
+  height: 40px;
+  flex: none;
+  padding: 0 20px;
 }
 
 .pagination-wrapper {
