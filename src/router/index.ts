@@ -234,14 +234,13 @@ const routes = [
         meta: { title: '个人信息', role: 'teacher' },
       },
 
-      // 学生
-      // {
-      //   path: ROUTES.STUDENT_DASHBOARD,
-      //   name: 'student_dashboard',
-      //   component: () => import('../pages/student/Dashboard.vue'),
-      //   meta: { title: '仪表盘', role: 'student' }
-      // },
     ],
+  },
+  {
+    path: ROUTES.STUDENT_DASHBOARD,
+    name: 'student_dashboard',
+    component: () => import('../pages/student/Dashboard.vue'),
+    meta: { title: '学生端首页', role: 'student' },
   },
   {
     path: '/admin',

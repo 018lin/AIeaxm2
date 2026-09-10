@@ -16,8 +16,8 @@ onMounted(() => {
     else window.location.assign('/auth/login')
     return
   }
-  // const role = (localStorage.getItem('role') || 'teacher') as 'teacher' | 'student'
-  const target = ROUTES.TEACHER_DASHBOARD
+  const selectedPortalRole = localStorage.getItem('selectedPortalRole')
+  const target = selectedPortalRole === 'student' ? ROUTES.STUDENT_DASHBOARD : ROUTES.TEACHER_DASHBOARD
   if (hasRouter) router.replace(target)
   else window.location.assign(target)
 })

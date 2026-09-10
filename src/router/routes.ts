@@ -63,6 +63,9 @@ export const ROUTES = {
   TEACHER_QUESTION_PAGE_DETAIL: '/teacher/question-bank/page/detail/:id',
   TEACHER_QUESTION_UPLOAD: '/teacher/question-bank/upload',
 
+  // 学生端
+  STUDENT_DASHBOARD: '/student/dashboard',
+
   // 管理员端
   ADMIN_EDUCATION_CLASS: '/admin/education/class',
   ADMIN_EDUCATION_CLASS_DETAIL: '/admin/education/class/detail',
@@ -72,7 +75,6 @@ export const ROUTES = {
   ADMIN_EDUCATION_STUDENT_CREATE: '/admin/education/student/create',
 
   // ADMIN_DASHBOARD: '/system/dashboard',
-  // STUDENT_DASHBOARD: '/student/dashboard',
   // AFFAIRS_OVERVIEW: '/affairs/overview',
 } as const
 
