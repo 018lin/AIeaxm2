@@ -50,6 +50,7 @@ import { getQuestionBankDetailList, listQuestionBank, queryQuestionBankDetailPag
 import type {
   ImportQuestionBankBatchResponse,
   listQuestionBankRequest,
+  QuestionBankDetailQueryRequest,
   QuestionBankDetailResponse,
   questionBankItem,
 } from '@/api/questionBank/type'
@@ -199,6 +200,7 @@ const syncFiltersWithUpload = (payload?: UploadSubmitPayload) => {
 const getPageRows = <T = any>(response: any): T[] => {
   const data = unwrapResponseData(response)
   if (Array.isArray(data?.list)) return data.list
+  if (Array.isArray(data?.questionList)) return data.questionList
   if (Array.isArray(data?.records)) return data.records
   if (Array.isArray(data?.rows)) return data.rows
   if (Array.isArray(data)) return data

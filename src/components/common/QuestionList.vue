@@ -47,11 +47,11 @@
       </div>
       <div class="mk-qbody">
         <div class="q-content">
-          <template v-if="q.questionsAttachment">
-            <QuestionItem v-if="source === 'BANK'" :questionInfo="q" />
+          <template v-if="getQuestionImageSrc(q)">
+            <QuestionItem v-if="source === 'BANK' && hasAnswerCoordinates(q)" :questionInfo="q" />
             <img
               v-else
-              :src="q.questionsAttachment"
+              :src="getQuestionImageSrc(q)"
               alt=""
               class="q-img"
               :style="{ maxWidth: q.layoutFormat === 'A4-2' ? '300px' : '600px' }"
@@ -167,10 +167,35 @@ const localList = ref<questionBankItem[]>([])
 watch(
   () => props.list,
   v => {
-    localList.value = Array.isArray(v) ? [...v] : []
+    localList.value = Array.isArray(v) ? v.map(normalizeQuestionItem) : []
   },
   { immediate: true }
 )
+
+const isImageLikeUrl = (value: unknown) => {
+  const raw = String(value || '').trim()
+  return (
+    /^data:image\//i.test(raw) ||
+    /^blob:/i.test(raw) ||
+    /^https?:\/\/.+\.(?:png|jpe?g|webp|gif)(?:[?#].*)?$/i.test(raw) ||
+    /^\/.+\.(?:png|jpe?g|webp|gif)(?:[?#].*)?$/i.test(raw)
+  )
+}
+
+const normalizeQuestionItem = (q: questionBankItem): questionBankItem => {
+  const imageSrc = String(q.questionsAttachment || q.questionsUrl || '').trim()
+  if (imageSrc && !q.questionsAttachment) return { ...q, questionsAttachment: imageSrc }
+  if (!imageSrc && isImageLikeUrl(q.questionContent)) return { ...q, questionsAttachment: String(q.questionContent || '') }
+  return { ...q }
+}
+
+const getQuestionImageSrc = (q: questionBankItem) => {
+  return String(q.questionsAttachment || q.questionsUrl || '').trim()
+}
+
+const hasAnswerCoordinates = (q: questionBankItem) => {
+  return Array.isArray(q.coordinates?.data) && q.coordinates.data.length > 0
+}
 
 const escapeHtml = (value: string) =>
   value

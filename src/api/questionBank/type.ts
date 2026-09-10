@@ -154,6 +154,7 @@ export interface questionBankItem {
   questionContent?: string // 题目原始内容
   questionId?: string // 题目唯一id
   questionsAttachment?: string // 题目附件
+  questionsUrl?: string // 题目图片预览地址
   questionType?: string // 题目类型
   questionTypeTagName?: string // 题型标签名称
   layoutFormat?: string // 布局格式

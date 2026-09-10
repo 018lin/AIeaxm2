@@ -1605,6 +1605,7 @@ function mapQuestion(row) {
     questionId: String(row.questionId || row.id),
     questionContent: row.questionContent || row.content || row.title || '',
     questionsAttachment: row.questionsAttachment || '',
+    questionsUrl: row.questionsUrl || row.questionsAttachment || '',
     answerAttachment: '',
     analysisAttachment: '',
     correctAnswer: row.correctAnswer || '',
