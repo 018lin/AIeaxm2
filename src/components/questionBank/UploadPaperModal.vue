@@ -138,6 +138,11 @@ const emit = defineEmits<{
 const loading = ref(false)
 type UploadMode = 'pdf' | 'image' | 'json'
 const uploadMode = ref<UploadMode>('pdf')
+const defaultEntryConfig = {
+  questionBankTypeId: 'sync',
+  textbookVersionId: 'default',
+  volume: '1',
+}
 const form = reactive<{
   stageId?: string
   gradeId?: string
@@ -150,9 +155,9 @@ const form = reactive<{
   stageId: undefined,
   gradeId: undefined,
   subject: undefined,
-  questionBankTypeId: undefined,
-  textbookVersionId: undefined,
-  volume: undefined,
+  questionBankTypeId: defaultEntryConfig.questionBankTypeId,
+  textbookVersionId: defaultEntryConfig.textbookVersionId,
+  volume: defaultEntryConfig.volume,
   fileList: [],
 })
 const gradeList = ref<dictListItem[]>([]) // 年级字典列表
@@ -241,9 +246,7 @@ const getDictItems = (res: dictListResponse[], dictType: string) => {
   const group = res.find(item => item.dictType === dictType)
   if (group?.dictTypeList?.length) return group.dictTypeList.map(normalizeItem)
 
-  return res
-    .filter((item: any) => item.dictType === dictType && (item.dictValue || item.value))
-    .map(normalizeItem)
+  return res.filter((item: any) => item.dictType === dictType && (item.dictValue || item.value)).map(normalizeItem)
 }
 
 const getDictData = async () => {
@@ -259,9 +262,11 @@ const getDictData = async () => {
 }
 
 const fillHiddenDefaults = () => {
-  form.questionBankTypeId = form.questionBankTypeId || itemTypeList.value[0]?.dictValue
-  form.textbookVersionId = form.textbookVersionId || versionList.value[0]?.dictValue
-  form.volume = form.volume || volumeList.value[0]?.dictValue
+  form.questionBankTypeId =
+    form.questionBankTypeId || itemTypeList.value[0]?.dictValue || defaultEntryConfig.questionBankTypeId
+  form.textbookVersionId =
+    form.textbookVersionId || versionList.value[0]?.dictValue || defaultEntryConfig.textbookVersionId
+  form.volume = form.volume || volumeList.value[0]?.dictValue || defaultEntryConfig.volume
 }
 
 const getFileExt = (file: File) => {
@@ -365,9 +370,9 @@ const resetForm = () => {
   form.stageId = undefined
   form.gradeId = undefined
   form.subject = undefined
-  form.questionBankTypeId = undefined
-  form.textbookVersionId = undefined
-  form.volume = undefined
+  form.questionBankTypeId = defaultEntryConfig.questionBankTypeId
+  form.textbookVersionId = defaultEntryConfig.textbookVersionId
+  form.volume = defaultEntryConfig.volume
   form.fileList = []
   uploadMode.value = 'pdf'
 }
@@ -472,7 +477,8 @@ watch(
       return
     }
     getDictData().catch(() => {
-      message.error('获取题目归属字典失败')
+      fillHiddenDefaults()
+      console.warn('获取题目归属字典失败，已使用题目录入默认配置')
     })
   },
   { immediate: true }
