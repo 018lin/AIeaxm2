@@ -6,8 +6,10 @@ export interface ImportQuestionBankBatchRequest {
   questionBankTypeId: string // 题库类型 ID（同步/周测/月考/期中/期末）
   textbookVersionId: string // 教材版本 ID
   volume: string // 教材册次 ID
-  files: File[] // 上传文件列表
-  importFormat?: 'examcoo_json' // 导入格式：Examcoo JSON 题库
+  files?: File[] // JSON 上传文件列表
+  questionFiles?: File[] // 图片上传：题目图片列表
+  answerFiles?: File[] // 图片上传：答案图片列表
+  importFormat?: 'examcoo_json' | 'image_pairs' // 导入格式：Examcoo JSON 题库 / 图片题库
   chapterId?: string // 章节 ID（可选，后端根据需要决定是否使用）
 }
 

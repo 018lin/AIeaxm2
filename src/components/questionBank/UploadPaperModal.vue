@@ -62,9 +62,10 @@
 
           <div class="field full mt-20 flex-col">
             <div class="input-label">
-              <span>上传题目文件</span>
+              <span>{{ uploadMode === 'image' ? '上传题目图片' : '上传题目文件' }}</span>
             </div>
             <a-upload-dragger
+              v-if="uploadMode !== 'image'"
               class="upload-dragger"
               name="file"
               multiple
@@ -81,6 +82,47 @@
                 <div class="upload-tip">{{ uploadTip }}</div>
               </div>
             </a-upload-dragger>
+
+            <template v-else>
+              <a-upload-dragger
+                class="upload-dragger"
+                name="questionFiles"
+                multiple
+                :accept="uploadAccept"
+                :file-list="form.questionFileList"
+                :before-upload="beforeImageUpload('question')"
+                @remove="onImageRemove('question', $event)"
+              >
+                <div class="upload-inner">
+                  <div class="upload-icon-wrap">
+                    <Icon icon="iwwa:upload" width="30" />
+                  </div>
+                  <div class="upload-main-text">上传题目图片</div>
+                  <div class="upload-tip">支持 jpg、jpeg、png，可一次上传多张；每张图片生成一道题</div>
+                </div>
+              </a-upload-dragger>
+
+              <div class="input-label answer-upload-label">
+                <span>上传答案图片</span>
+              </div>
+              <a-upload-dragger
+                class="upload-dragger"
+                name="answerFiles"
+                multiple
+                :accept="uploadAccept"
+                :file-list="form.answerFileList"
+                :before-upload="beforeImageUpload('answer')"
+                @remove="onImageRemove('answer', $event)"
+              >
+                <div class="upload-inner">
+                  <div class="upload-icon-wrap">
+                    <Icon icon="iwwa:upload" width="30" />
+                  </div>
+                  <div class="upload-main-text">上传答案图片</div>
+                  <div class="upload-tip">按上传顺序与题目图片配对；可少于题目图片</div>
+                </div>
+              </a-upload-dragger>
+            </template>
           </div>
         </div>
       </a-spin>
@@ -102,7 +144,7 @@ import { selectEnum } from '@/enum/common'
 // 切片上传
 // import { uploadFileResumable } from '@/services/fragmentedUpload'
 import { dictGradeOneList, dictGradeThreeList, dictGradeTwoList, dictStageList } from '@/utils/dictList'
-import { FilePdfOutlined, FileTextOutlined, PictureOutlined } from '@ant-design/icons-vue'
+import { FileTextOutlined, PictureOutlined } from '@ant-design/icons-vue'
 import { Icon } from '@iconify/vue'
 import type { UploadProps } from 'ant-design-vue'
 import { Upload, message } from 'ant-design-vue'
@@ -128,9 +170,8 @@ const emit = defineEmits<{
 }>()
 
 const loading = ref(false)
-type UploadMode = 'pdf' | 'image' | 'json'
-const jsonOnlyUpload = Boolean(import.meta.env.PROD)
-const getDefaultUploadMode = (): UploadMode => (jsonOnlyUpload ? 'json' : 'pdf')
+type UploadMode = 'image' | 'json'
+const getDefaultUploadMode = (): UploadMode => 'image'
 const uploadMode = ref<UploadMode>(getDefaultUploadMode())
 const defaultEntryConfig = {
   questionBankTypeId: 'sync',
@@ -145,6 +186,8 @@ const form = reactive<{
   textbookVersionId?: string
   volume?: string
   fileList: UploadProps['fileList']
+  questionFileList: UploadProps['fileList']
+  answerFileList: UploadProps['fileList']
 }>({
   stageId: undefined,
   gradeId: undefined,
@@ -153,6 +196,8 @@ const form = reactive<{
   textbookVersionId: defaultEntryConfig.textbookVersionId,
   volume: defaultEntryConfig.volume,
   fileList: [],
+  questionFileList: [],
+  answerFileList: [],
 })
 const gradeList = ref<dictListItem[]>([]) // 年级字典列表
 const itemTypeList = ref<dictListItem[]>([])
@@ -182,12 +227,6 @@ const subjectList = computed(() => {
 })
 
 const uploadModeConfig: Record<UploadMode, { accept: string; allowed: Set<string>; label: string; tip: string }> = {
-  pdf: {
-    accept: '.pdf',
-    allowed: new Set(['pdf']),
-    label: 'PDF 文件',
-    tip: '支持 PDF 文件，可一次上传多个文件',
-  },
   image: {
     accept: '.jpg,.jpeg,.png',
     allowed: new Set(['jpg', 'jpeg', 'png']),
@@ -203,16 +242,11 @@ const uploadModeConfig: Record<UploadMode, { accept: string; allowed: Set<string
 }
 
 const uploadModeIconMap = {
-  pdf: FilePdfOutlined,
   image: PictureOutlined,
   json: FileTextOutlined,
 }
-const availableUploadModes = computed<UploadMode[]>(() => (jsonOnlyUpload ? ['json'] : ['pdf', 'image', 'json']))
-const uploadIntro = computed(() =>
-  jsonOnlyUpload
-    ? '请填写题目归属信息，并选择 JSON 题库文件上传入库'
-    : '请填写题目归属信息，并选择 PDF、图片或 JSON 题库文件上传入库'
-)
+const availableUploadModes = computed<UploadMode[]>(() => ['image', 'json'])
+const uploadIntro = computed(() => '请填写题目归属信息，并选择图片或 JSON 题库文件上传入库')
 const uploadAccept = computed(() => uploadModeConfig[uploadMode.value].accept)
 const uploadTip = computed(() => uploadModeConfig[uploadMode.value].tip)
 
@@ -366,9 +400,37 @@ const beforeUpload: UploadProps['beforeUpload'] = file => {
   return false
 }
 
+const beforeImageUpload =
+  (type: 'question' | 'answer'): UploadProps['beforeUpload'] =>
+  file => {
+    const name = String((file as any)?.name || '')
+    const ext = name.includes('.') ? name.split('.').pop()?.toLowerCase() : ''
+    const config = uploadModeConfig.image
+
+    if (!ext || !config.allowed.has(ext)) {
+      message.warning(`文件 ${name} 格式不支持，图片上传仅支持 jpg、jpeg、png`)
+      return Upload.LIST_IGNORE
+    }
+
+    if (type === 'question') {
+      form.questionFileList = [...(form.questionFileList || []), file]
+    } else {
+      form.answerFileList = [...(form.answerFileList || []), file]
+    }
+    return false
+  }
+
 // 移除文件：从 fileList 中删除对应项。
 const onRemove: UploadProps['onRemove'] = file => {
   form.fileList = (form.fileList || []).filter(f => f.uid !== file.uid)
+}
+
+const onImageRemove = (type: 'question' | 'answer', file: any) => {
+  if (type === 'question') {
+    form.questionFileList = (form.questionFileList || []).filter(f => f.uid !== file.uid)
+  } else {
+    form.answerFileList = (form.answerFileList || []).filter(f => f.uid !== file.uid)
+  }
 }
 
 const resetForm = () => {
@@ -379,6 +441,8 @@ const resetForm = () => {
   form.textbookVersionId = defaultEntryConfig.textbookVersionId
   form.volume = defaultEntryConfig.volume
   form.fileList = []
+  form.questionFileList = []
+  form.answerFileList = []
   uploadMode.value = getDefaultUploadMode()
 }
 
@@ -408,7 +472,13 @@ const handleOk = async () => {
   }
 
   const files = extractFiles(form.fileList)
-  if (files.length === 0) return message.warning('请上传文件')
+  const questionFiles = extractFiles(form.questionFileList)
+  const answerFiles = extractFiles(form.answerFileList)
+  if (uploadMode.value === 'image') {
+    if (questionFiles.length === 0) return message.warning('请上传题目图片')
+  } else if (files.length === 0) {
+    return message.warning('请上传文件')
+  }
   if (uploadMode.value === 'json') {
     const valid = await validateExamcooJsonFiles(files)
     if (!valid) return
@@ -449,8 +519,10 @@ const handleOk = async () => {
       questionBankTypeId: String(form.questionBankTypeId),
       textbookVersionId: String(form.textbookVersionId),
       volume: String(form.volume),
-      importFormat: uploadMode.value === 'json' ? 'examcoo_json' : undefined,
-      files,
+      importFormat: uploadMode.value === 'json' ? 'examcoo_json' : 'image_pairs',
+      files: uploadMode.value === 'json' ? files : undefined,
+      questionFiles: uploadMode.value === 'image' ? questionFiles : undefined,
+      answerFiles: uploadMode.value === 'image' ? answerFiles : undefined,
       /* 切片上传
       files: uploadedRefs as any, */
     } as ImportQuestionBankBatchRequest
@@ -496,8 +568,10 @@ watch(
 )
 
 watch(uploadMode, () => {
-  if (form.fileList?.length) {
+  if (form.fileList?.length || form.questionFileList?.length || form.answerFileList?.length) {
     form.fileList = []
+    form.questionFileList = []
+    form.answerFileList = []
     message.info('已切换上传方式，请重新选择文件')
   }
 })
@@ -610,6 +684,10 @@ watch(uploadMode, () => {
     margin-top: 8px;
     font-size: 12px;
     color: #9ca3af;
+  }
+
+  .answer-upload-label {
+    margin-top: 18px;
   }
 
   .ant-upload.ant-upload-drag {

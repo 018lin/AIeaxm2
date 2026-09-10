@@ -1697,6 +1697,44 @@ function mimeForExt(ext = '') {
   return 'application/octet-stream'
 }
 
+function isImageFile(file = {}) {
+  return ['png', 'jpg', 'jpeg'].includes(fileExt(file.fileName))
+}
+
+function imageDataUrl(file = {}) {
+  const ext = fileExt(file.fileName)
+  return `data:${file.mimeType || mimeForExt(ext)};base64,${file.buffer.toString('base64')}`
+}
+
+function imageHtml(file = {}, alt = '') {
+  return `<img src="${imageDataUrl(file)}" alt="${escapeHtml(alt || file.fileName || '')}" />`
+}
+
+function questionImportTypeName(importFormat = '') {
+  if (importFormat === 'image_pairs') return '图片题库'
+  if (importFormat === 'examcoo_json') return 'JSON题库'
+  if (importFormat === 'local') return '本地题库'
+  return '题库'
+}
+
+function getImagePairFiles(files = []) {
+  const imageFiles = files.filter(isImageFile)
+  const questionFiles = files.filter(file => file.fieldName === 'questionFiles' && isImageFile(file))
+  const answerFiles = files.filter(file => file.fieldName === 'answerFiles' && isImageFile(file))
+
+  return {
+    questionFiles: questionFiles.length ? questionFiles : imageFiles.filter(file => file.fieldName !== 'answerFiles'),
+    answerFiles,
+    invalidFiles: files.filter(file => !isImageFile(file)),
+  }
+}
+
+export const __test = {
+  getImagePairFiles,
+  imageHtml,
+  questionImportTypeName,
+}
+
 function extractImageRefsFromHtml(html = '') {
   const refs = new Set()
   const imgReg = /<img\b[^>]*\bsrc=(["']?)([^"'\s>]+)\1/gi
@@ -1776,8 +1814,11 @@ async function importExamcooQuestionBank(req) {
   await ensureQuestionImportSchema()
 
   const { fields, files } = await readMultipartForm(req)
+  if (fields.importFormat === 'image_pairs') {
+    return importImagePairQuestionBank({ fields, files, user })
+  }
   if (fields.importFormat !== 'examcoo_json') {
-    return notImplemented('PDF/图片切题解析依赖真实业务后端；JSON题库导入请使用 importFormat=examcoo_json。')
+    return notImplemented('PDF切题解析依赖真实业务后端；JSON题库导入请使用 importFormat=examcoo_json，图片题库导入请使用 importFormat=image_pairs。')
   }
 
   const jsonFiles = files.filter(file => fileExt(file.fileName) === 'json')
@@ -1888,6 +1929,105 @@ async function importExamcooQuestionBank(req) {
   })
 }
 
+async function importImagePairQuestionBank({ fields, files, user }) {
+  const { questionFiles, answerFiles, invalidFiles } = getImagePairFiles(files)
+  if (invalidFiles.length) {
+    return fail(`图片题库导入仅支持 jpg、jpeg、png：${invalidFiles.slice(0, 5).map(file => file.fileName).join('、')}`, 400)
+  }
+  if (!questionFiles.length) return fail('图片题库导入至少需要上传 1 张题目图片', 400)
+
+  const batchId = `image-${Date.now()}-${randomUUID().slice(0, 8)}`
+  const detailId = batchId
+  const examTitle = String(fields.examTitle || fields.title || `图片题库-${new Date().toISOString().slice(0, 10)}`).slice(0, 500)
+  const creator = String(user.id || '')
+  const tenantId = Number(user.tenant_id || process.env.APP_TENANT_ID || 1)
+  let importedQuestionCount = 0
+  let skippedQuestionCount = 0
+  const successFiles = []
+
+  for (const [index, questionFile] of questionFiles.entries()) {
+    const no = index + 1
+    const answerFile = answerFiles[index]
+    const content = imageHtml(questionFile, `第${no}题`)
+    const answerHtml = answerFile ? imageHtml(answerFile, `第${no}题答案`) : ''
+    const title = `图片题目 ${no}：${questionFile.fileName || ''}`.slice(0, 500)
+
+    const insertResult = await query(
+      `INSERT INTO homework_questions
+        (title, content, type, difficulty, subject, grade, score, estimated_time, status, usage_count, correct_rate, creator, updater, deleted, tenant_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0, ?, ?, 0, ?)`,
+      [
+        title,
+        title,
+        String(fields.questionType || 'answer'),
+        String(fields.difficulty || 'medium'),
+        String(fields.subjectId || ''),
+        String(fields.gradeId || ''),
+        Math.round(Number(fields.score || 5)),
+        Number(fields.estimatedTime || 5),
+        creator,
+        creator,
+        tenantId,
+      ]
+    )
+
+    const questionId = Number(insertResult?.insertId || 0)
+    if (!questionId) {
+      skippedQuestionCount += 1
+      continue
+    }
+
+    await query(
+      `INSERT INTO homework_question_import_meta
+        (question_id, batch_id, detail_id, exam_title, import_format, source_exam_id, external_question_id, original_no,
+         section_title, stem_html, answer_html, correct_answer, options_json, images_json, creator, tenant_id)
+       VALUES (?, ?, ?, ?, 'image_pairs', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        questionId,
+        batchId,
+        detailId,
+        examTitle,
+        batchId,
+        `${no}-${normalizeFileName(questionFile.fileName || '')}`,
+        no,
+        '',
+        content,
+        answerHtml,
+        '',
+        JSON.stringify([]),
+        JSON.stringify({
+          question: questionFile.fileName || '',
+          answer: answerFile?.fileName || '',
+        }),
+        creator,
+        tenantId,
+      ]
+    )
+
+    importedQuestionCount += 1
+    successFiles.push({
+      fileName: questionFile.fileName,
+      fileType: fileExt(questionFile.fileName),
+      mimeType: questionFile.mimeType,
+      fileSize: questionFile.size,
+    })
+  }
+
+  return ok({
+    successCount: importedQuestionCount,
+    failedCount: skippedQuestionCount,
+    totalCount: questionFiles.length,
+    successFiles,
+    failedFiles: [],
+    batchId,
+    detailId,
+    directoryPath: '',
+    importedQuestionCount,
+    skippedQuestionCount,
+    missingImages: [],
+  })
+}
+
 async function questionPage(req) {
   try {
     await ensureQuestionImportSchema()
@@ -1918,7 +2058,7 @@ async function questionPage(req) {
           q.status,
           q.creator,
           q.create_time AS createTime,
-          m.correct_answer AS correctAnswer,
+          COALESCE(NULLIF(m.answer_html, ''), m.correct_answer) AS correctAnswer,
           '' AS answerAnalysis
          FROM homework_questions q
          LEFT JOIN homework_question_import_meta m ON m.question_id = q.id AND m.deleted = 0
@@ -1955,7 +2095,7 @@ async function questionDetail(req) {
         q.status,
         q.creator,
         q.create_time AS createTime,
-        m.correct_answer AS correctAnswer,
+        COALESCE(NULLIF(m.answer_html, ''), m.correct_answer) AS correctAnswer,
         '' AS answerAnalysis
        FROM homework_questions q
        LEFT JOIN homework_question_import_meta m ON m.question_id = q.id AND m.deleted = 0
@@ -2003,6 +2143,7 @@ async function questionBankDetailPage(req) {
           m.detail_id AS detailId,
           m.batch_id AS batchId,
           m.exam_title AS examTitle,
+          m.import_format AS importFormat,
           q.subject AS subjectId,
           q.subject AS subjectName,
           q.grade AS gradeId,
@@ -2014,13 +2155,14 @@ async function questionBankDetailPage(req) {
          FROM homework_question_import_meta m
          JOIN homework_questions q ON q.id = m.question_id
          WHERE ${where} AND m.deleted = 0
-         GROUP BY m.detail_id, m.batch_id, m.exam_title, q.subject, q.grade, m.creator
+         GROUP BY m.detail_id, m.batch_id, m.exam_title, m.import_format, q.subject, q.grade, m.creator
          UNION ALL
          SELECT
           MIN(q.id) AS id,
           CONCAT('local-', q.subject, '-', q.grade) AS detailId,
           CONCAT('local-', q.subject, '-', q.grade) AS batchId,
           CONCAT(q.grade, q.subject, '题库') AS examTitle,
+          'local' AS importFormat,
           q.subject AS subjectId,
           q.subject AS subjectName,
           q.grade AS gradeId,
@@ -2053,9 +2195,9 @@ async function questionBankDetailPage(req) {
         stageName: '',
         termId: '',
         termName: '',
-        itemType: String(row.detailId || '').startsWith('local-') ? 'local' : 'examcoo_json',
-        itemTypeName: String(row.detailId || '').startsWith('local-') ? '本地题库' : 'JSON题库',
-        typeName: String(row.detailId || '').startsWith('local-') ? '本地题库' : 'JSON题库',
+        itemType: String(row.importFormat || (String(row.detailId || '').startsWith('local-') ? 'local' : 'examcoo_json')),
+        itemTypeName: questionImportTypeName(row.importFormat || (String(row.detailId || '').startsWith('local-') ? 'local' : 'examcoo_json')),
+        typeName: questionImportTypeName(row.importFormat || (String(row.detailId || '').startsWith('local-') ? 'local' : 'examcoo_json')),
         auditStatus: 'AUDIT_PASS',
         creatorName: row.creator || '导入数据',
         createTime: toDateTime(row.createTime),
@@ -2080,6 +2222,7 @@ async function questionBankDetailByPath(req) {
         m.detail_id AS detailId,
         m.batch_id AS batchId,
         m.exam_title AS examTitle,
+        m.import_format AS importFormat,
         q.subject AS subjectId,
         q.subject AS subjectName,
         q.grade AS gradeId,
@@ -2089,7 +2232,7 @@ async function questionBankDetailByPath(req) {
        FROM homework_question_import_meta m
        JOIN homework_questions q ON q.id = m.question_id
        WHERE q.deleted = b'0' AND m.deleted = 0 AND m.detail_id = ?
-       GROUP BY m.detail_id, m.batch_id, m.exam_title, q.subject, q.grade
+       GROUP BY m.detail_id, m.batch_id, m.exam_title, m.import_format, q.subject, q.grade
        LIMIT 1`,
       [detailId]
     )
@@ -2142,8 +2285,8 @@ async function questionBankDetailByPath(req) {
       gradeName: row.gradeName,
       subjectId: row.subjectId,
       subjectName: row.subjectName,
-      itemType: 'examcoo_json',
-      itemTypeName: 'JSON题库',
+      itemType: row.importFormat || 'examcoo_json',
+      itemTypeName: questionImportTypeName(row.importFormat || 'examcoo_json'),
       auditStatus: 'AUDIT_PASS',
       createTime: toDateTime(row.createTime),
       updateTime: toDateTime(row.updateTime || row.createTime),
@@ -2265,7 +2408,7 @@ async function questionBankDetailQuestions(req) {
           q.status,
           q.creator,
           q.create_time AS createTime,
-          m.correct_answer AS correctAnswer,
+          COALESCE(NULLIF(m.answer_html, ''), m.correct_answer) AS correctAnswer,
           '' AS answerAnalysis
          FROM homework_questions q
          JOIN homework_question_import_meta m ON m.question_id = q.id
