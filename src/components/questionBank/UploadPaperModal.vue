@@ -10,8 +10,8 @@
   >
     <div class="upload-card">
       <div class="upload-header">
-        <div class="title-cn">上传试卷</div>
-        <div class="sub">请填写以下信息并上传您的教学文件</div>
+        <div class="title-cn">录入题目</div>
+        <div class="sub">请填写题目归属信息，并选择 PDF 文件或图片上传入库</div>
       </div>
 
       <a-spin class="upload-form-spin" :spinning="loading" tip="上传中..." size="large" :delay="120">
@@ -70,13 +70,29 @@
 
           <div class="field full mt-20 flex-col">
             <div class="input-label">
-              <span>上传文件</span>
+              <span>上传方式</span>
+            </div>
+            <a-radio-group v-model:value="uploadMode" button-style="solid" class="upload-mode-group">
+              <a-radio-button value="pdf">
+                <FilePdfOutlined />
+                PDF 文件
+              </a-radio-button>
+              <a-radio-button value="image">
+                <PictureOutlined />
+                图片
+              </a-radio-button>
+            </a-radio-group>
+          </div>
+
+          <div class="field full mt-20 flex-col">
+            <div class="input-label">
+              <span>上传题目文件</span>
             </div>
             <a-upload-dragger
               class="upload-dragger"
               name="file"
               multiple
-              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+              :accept="uploadAccept"
               :file-list="form.fileList"
               :before-upload="beforeUpload"
               @remove="onRemove"
@@ -86,7 +102,7 @@
                   <Icon icon="iwwa:upload" width="30" />
                 </div>
                 <div class="upload-main-text">点击或者拖拽文件到此处</div>
-                <div class="upload-tip">支持 pdf、word、jpg、png 等格式</div>
+                <div class="upload-tip">{{ uploadTip }}</div>
               </div>
             </a-upload-dragger>
           </div>
@@ -111,6 +127,7 @@ import { selectEnum } from '@/enum/common'
 // 切片上传
 // import { uploadFileResumable } from '@/services/fragmentedUpload'
 import { dictGradeOneList, dictGradeThreeList, dictGradeTwoList, dictStageList } from '@/utils/dictList'
+import { FilePdfOutlined, PictureOutlined } from '@ant-design/icons-vue'
 import { Icon } from '@iconify/vue'
 import type { UploadProps } from 'ant-design-vue'
 import { Upload, message } from 'ant-design-vue'
@@ -136,6 +153,8 @@ const emit = defineEmits<{
 }>()
 
 const loading = ref(false)
+type UploadMode = 'pdf' | 'image'
+const uploadMode = ref<UploadMode>('pdf')
 const chapterTreeData = ref<chapterResponse[]>([])
 const form = reactive<{
   stageId?: string
@@ -159,6 +178,24 @@ const form = reactive<{
 const gradeList = ref<dictListResponse[]>([]) // 年级字典列表
 
 const selectValue = computed(() => [form.subject, form.questionBankTypeId, form.textbookVersionId, form.volume])
+
+const uploadModeConfig: Record<UploadMode, { accept: string; allowed: Set<string>; label: string; tip: string }> = {
+  pdf: {
+    accept: '.pdf',
+    allowed: new Set(['pdf']),
+    label: 'PDF 文件',
+    tip: '支持 PDF 文件，可一次上传多个文件',
+  },
+  image: {
+    accept: '.jpg,.jpeg,.png',
+    allowed: new Set(['jpg', 'jpeg', 'png']),
+    label: '图片',
+    tip: '支持 jpg、jpeg、png 图片，可一次上传多张',
+  },
+}
+
+const uploadAccept = computed(() => uploadModeConfig[uploadMode.value].accept)
+const uploadTip = computed(() => uploadModeConfig[uploadMode.value].tip)
 
 const chapterSelectDisabled = computed(() => {
   return !form.subject || !form.textbookVersionId || !form.volume || !form.gradeId
@@ -199,10 +236,10 @@ const handleGetList = (val: any) => {
 const beforeUpload: UploadProps['beforeUpload'] = file => {
   const name = String((file as any)?.name || '')
   const ext = name.includes('.') ? name.split('.').pop()?.toLowerCase() : ''
-  const allowed = new Set(['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'])
+  const config = uploadModeConfig[uploadMode.value]
 
-  if (!ext || !allowed.has(ext)) {
-    message.warning(`文件 ${name} 格式不支持，仅支持 pdf、doc、docx、jpg、jpeg、png`)
+  if (!ext || !config.allowed.has(ext)) {
+    message.warning(`文件 ${name} 格式不支持，当前方式仅支持${config.label}`)
     return Upload.LIST_IGNORE
   }
 
@@ -225,6 +262,7 @@ const resetForm = () => {
   form.volume = undefined
   form.chapterId = undefined
   form.fileList = []
+  uploadMode.value = 'pdf'
   chapterTreeData.value = []
 }
 
@@ -401,6 +439,13 @@ watch(
     chapterTreeData.value = []
   }
 )
+
+watch(uploadMode, () => {
+  if (form.fileList?.length) {
+    form.fileList = []
+    message.info('已切换上传方式，请重新选择文件')
+  }
+})
 </script>
 
 <style lang="scss">
@@ -482,6 +527,26 @@ watch(
     color: #f97316;
     font-weight: 700;
     font-size: 16px;
+  }
+
+  .upload-mode-group {
+    display: flex;
+    width: 100%;
+
+    .ant-radio-button-wrapper {
+      flex: 1;
+      height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-weight: 600;
+    }
+
+    .ant-radio-button-wrapper-checked {
+      background: #f97316;
+      border-color: #f97316;
+    }
   }
 
   .upload-tip {

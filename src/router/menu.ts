@@ -202,7 +202,7 @@ export const TEACHER_MENU_ITEMS = [
         permission: 'teacher:question:query',
       },
       {
-        label: '自主上传',
+        label: '题目录入',
         icon: 'mdi:cloud-upload-outline',
         path: ROUTES.TEACHER_QUESTION_UPLOAD,
         permission: 'teacher:question:upload',

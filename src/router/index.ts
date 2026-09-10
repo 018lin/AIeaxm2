@@ -201,7 +201,7 @@ const routes = [
         path: ROUTES.TEACHER_QUESTION_UPLOAD,
         name: 'teacher_question_upload',
         component: () => import('../pages/teacher/questionBank/SelfUploading.vue'),
-        meta: { title: '题库管理-自主上传', role: 'teacher' },
+        meta: { title: '题库管理-题目录入', role: 'teacher' },
       },
       {
         path: ROUTES.TEACHER_QUESTION_PAGE_DETAIL,

@@ -10,14 +10,14 @@
         <div class="flex items-center gap-12">
           <a-button type="primary" class="upload-btn primary-btn" @click="isUploadModalOpen = true">
             <template #icon><PlusOutlined /></template>
-            上传试卷
+            录入题目
           </a-button>
         </div>
       </div>
     </div>
 
     <!-- 试卷列表 -->
-    <a-empty v-if="!loading && papers.length === 0" :image="simpleImage" description="暂无试题" />
+    <a-empty v-if="!loading && papers.length === 0" :image="simpleImage" description="暂无录入题目" />
     <div v-else class="paper-grid" ref="paperGridRef">
       <div class="paper-content">
         <div
