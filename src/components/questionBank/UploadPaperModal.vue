@@ -38,17 +38,38 @@
                 </a-select-option>
               </a-select>
             </div>
-            <SelectCom
-              :typeList="[
-                selectEnum.SUBJECT,
-                selectEnum.ITEM_TYPE,
-                selectEnum.TEXTBOOK_VERSION,
-                selectEnum.TEXTBOOK_VOLUME,
-              ]"
-              :select-value="selectValue"
-              showLabel
-              @getList="handleGetList"
-            />
+            <div>
+              <div class="input-label">科目</div>
+              <a-select v-model:value="form.subject" class="rc-select" placeholder="请选择科目">
+                <a-select-option v-for="item in subjectList" :key="item.dictValue" :value="item.dictValue">
+                  {{ item.label }}
+                </a-select-option>
+              </a-select>
+            </div>
+            <div>
+              <div class="input-label">类型</div>
+              <a-select v-model:value="form.questionBankTypeId" class="rc-select" placeholder="请选择类型">
+                <a-select-option v-for="item in itemTypeList" :key="item.dictValue" :value="item.dictValue">
+                  {{ item.label }}
+                </a-select-option>
+              </a-select>
+            </div>
+            <div>
+              <div class="input-label">教材版本</div>
+              <a-select v-model:value="form.textbookVersionId" class="rc-select" placeholder="请选择教材版本">
+                <a-select-option v-for="item in versionList" :key="item.dictValue" :value="item.dictValue">
+                  {{ item.label }}
+                </a-select-option>
+              </a-select>
+            </div>
+            <div>
+              <div class="input-label">册次</div>
+              <a-select v-model:value="form.volume" class="rc-select" placeholder="请选择册次">
+                <a-select-option v-for="item in volumeList" :key="item.dictValue" :value="item.dictValue">
+                  {{ item.label }}
+                </a-select-option>
+              </a-select>
+            </div>
             <div class="select-item">
               <div class="input-label">章节（选填）</div>
               <a-tooltip :title="chapterSelectTip" :mouse-enter-delay="0.08" :mouse-leave-delay="0.08">
@@ -118,11 +139,10 @@
 </template>
 
 <script setup lang="ts">
-import { getChapterList } from '@/api/common/index'
-import type { chapterResponse, dictListResponse } from '@/api/common/type'
+import { getChapterList, getDictList } from '@/api/common/index'
+import type { chapterResponse, dictListItem, dictListResponse } from '@/api/common/type'
 import { importQuestionBankBatch } from '@/api/questionBank'
 import type { ImportQuestionBankBatchRequest } from '@/api/questionBank/type'
-import SelectCom from '@/components/common/Select.vue'
 import { selectEnum } from '@/enum/common'
 // 切片上传
 // import { uploadFileResumable } from '@/services/fragmentedUpload'
@@ -133,7 +153,7 @@ import type { UploadProps } from 'ant-design-vue'
 import { Upload, message } from 'ant-design-vue'
 import { computed, reactive, ref, watch } from 'vue'
 
-defineProps<{
+const props = defineProps<{
   open: boolean
 }>()
 
@@ -175,9 +195,11 @@ const form = reactive<{
   chapterId: undefined,
   fileList: [],
 })
-const gradeList = ref<dictListResponse[]>([]) // 年级字典列表
-
-const selectValue = computed(() => [form.subject, form.questionBankTypeId, form.textbookVersionId, form.volume])
+const gradeList = ref<dictListItem[]>([]) // 年级字典列表
+const subjectList = ref<dictListItem[]>([])
+const itemTypeList = ref<dictListItem[]>([])
+const versionList = ref<dictListItem[]>([])
+const volumeList = ref<dictListItem[]>([])
 
 const uploadModeConfig: Record<UploadMode, { accept: string; allowed: Set<string>; label: string; tip: string }> = {
   pdf: {
@@ -222,14 +244,37 @@ const getGadeList = (value: string) => {
     gradeList.value = dictGradeTwoList
   } else if (value === '3') {
     gradeList.value = dictGradeThreeList
+  } else {
+    gradeList.value = []
   }
 }
 
-const handleGetList = (val: any) => {
-  if ('subjectId' in val) form.subject = val.subjectId
-  if ('itemType' in val) form.questionBankTypeId = val.itemType
-  if ('textbookVersionId' in val) form.textbookVersionId = val.textbookVersionId
-  if ('volume' in val) form.volume = val.volume
+const getDictItems = (res: dictListResponse[], dictType: string) => {
+  const normalizeItem = (item: any): dictListItem => ({
+    id: item.id,
+    label: item.label,
+    dictValue: item.dictValue ?? item.value,
+    value: item.value,
+    dictType: item.dictType,
+  })
+  const group = res.find(item => item.dictType === dictType)
+  if (group?.dictTypeList?.length) return group.dictTypeList.map(normalizeItem)
+
+  return res
+    .filter((item: any) => item.dictType === dictType && (item.dictValue || item.value))
+    .map(normalizeItem)
+}
+
+const getDictData = async () => {
+  const res = await getDictList({
+    dictTypes: [selectEnum.SUBJECT, selectEnum.ITEM_TYPE, selectEnum.TEXTBOOK_VERSION, selectEnum.TEXTBOOK_VOLUME],
+  })
+  const resData = res || []
+
+  subjectList.value = getDictItems(resData, selectEnum.SUBJECT)
+  itemTypeList.value = getDictItems(resData, selectEnum.ITEM_TYPE)
+  versionList.value = getDictItems(resData, selectEnum.TEXTBOOK_VERSION)
+  volumeList.value = getDictItems(resData, selectEnum.TEXTBOOK_VOLUME)
 }
 
 // 选择文件：限制格式并拦截自动上传，仅保留当前选择的文件。
@@ -336,7 +381,7 @@ const handleOk = async () => {
 
     await importQuestionBankBatch(params)
 
-    message.success('试卷上传成功')
+    message.success('题目录入成功')
     emit('submit', submitSnapshot)
 
     resetForm()
@@ -440,6 +485,20 @@ watch(
   }
 )
 
+watch(
+  () => props.open,
+  open => {
+    if (!open) return
+    if (subjectList.value.length && itemTypeList.value.length && versionList.value.length && volumeList.value.length) {
+      return
+    }
+    getDictData().catch(() => {
+      message.error('获取题目归属字典失败')
+    })
+  },
+  { immediate: true }
+)
+
 watch(uploadMode, () => {
   if (form.fileList?.length) {
     form.fileList = []
@@ -497,6 +556,8 @@ watch(uploadMode, () => {
   }
 
   .upload-form {
+    max-height: calc(100vh - 250px);
+    overflow-y: auto;
     background: #ffffff;
     border-radius: 18px;
     padding: 20px 24px 24px;
